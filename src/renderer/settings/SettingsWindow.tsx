@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import BackupSection from './BackupSection'
+import GeneralSection from './GeneralSection'
 import HotkeysSection from './HotkeysSection'
 import PresetsSection from './PresetsSection'
 import ScriptsSection from './ScriptsSection'
 
 const SECTIONS = [
+  { id: 'general', label: 'General', Component: GeneralSection },
   { id: 'hotkeys', label: 'Hotkeys', Component: HotkeysSection },
   { id: 'scripts', label: 'Scripts', Component: ScriptsSection },
   { id: 'presets', label: 'Presets', Component: PresetsSection },
@@ -12,7 +14,7 @@ const SECTIONS = [
 ] as const
 
 const SettingsWindow = () => {
-  const [active, setActive] = useState<(typeof SECTIONS)[number]['id']>('hotkeys')
+  const [active, setActive] = useState<(typeof SECTIONS)[number]['id']>('general')
   const { Component } = SECTIONS.find((s) => s.id === active) ?? SECTIONS[0]
 
   return (
