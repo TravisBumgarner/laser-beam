@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import path from 'node:path'
 import tty from 'node:tty'
 import { app, BrowserWindow, globalShortcut, ipcMain, screen, shell } from 'electron'
+import { UpdateSourceType, updateElectronApp } from 'update-electron-app'
 import { LAYOUT_POSITIONS, type Layout, type Settings } from '../shared/api'
 import { chat, deleteChat, listChats, recordChat } from './ai'
 import { openApp, searchApps, watchApps } from './apps'
@@ -10,6 +11,11 @@ import { deleteClip, listClips, pasteClip, watchClipboard } from './clipboard'
 import { initLaunchAtLogin, setLaunchAtLogin } from './loginItem'
 import { deletePreset, listPresets, runPreset, savePreset } from './presets'
 import { deleteScript, listScripts, runScript, saveScript } from './scripts'
+
+// update.electronjs.org only answers the all-lowercase owner/repo path.
+updateElectronApp({
+  updateSource: { type: UpdateSourceType.ElectronPublicUpdateService, repo: 'travisbumgarner/laser-beam' },
+})
 
 // Logging to a closed terminal (dev process killed) throws EPIPE; ignore it.
 for (const stream of [process.stdout, process.stderr]) stream.on('error', () => {})
