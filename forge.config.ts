@@ -8,6 +8,7 @@ const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     executableName: 'laser-beam',
+    icon: 'assets/icon',
     // Hardened runtime needs this for the osascript/System Events calls.
     extendInfo: { NSAppleEventsUsageDescription: 'Laser Beam pastes clips and arranges windows.' },
     osxSign: shouldSign

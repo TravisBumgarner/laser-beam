@@ -13,6 +13,7 @@ const api: Api = {
   openApp: (path) => ipcRenderer.invoke('apps:open', path),
   searchWeb: (query) => ipcRenderer.invoke('web:search', query),
   getSettings: () => ipcRenderer.invoke('settings:get'),
+  setLaunchAtLogin: (enabled) => ipcRenderer.invoke('settings:launchAtLogin', enabled),
   runScript: (command) => ipcRenderer.invoke('script:run', command),
   listScripts: () => ipcRenderer.invoke('scripts:list'),
   saveScript: (draft) => ipcRenderer.invoke('scripts:save', draft),

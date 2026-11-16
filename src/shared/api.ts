@@ -43,7 +43,7 @@ export type ChatResult = { ok: true; text: string; sessionId: string } | { ok: f
 
 export type ClipEntry = { text: string; copiedAt: number }
 
-export type Settings = { hotkey: string }
+export type Settings = { hotkey: string; launchAtLogin: boolean }
 
 export type Api = {
   hide: () => void
@@ -53,6 +53,7 @@ export type Api = {
   openApp: (path: string) => Promise<void>
   searchWeb: (query: string) => Promise<void>
   getSettings: () => Promise<Settings>
+  setLaunchAtLogin: (enabled: boolean) => Promise<Settings>
   runScript: (command: string) => Promise<ScriptResult>
   listScripts: () => Promise<SavedScript[]>
   saveScript: (draft: ScriptDraft) => Promise<SaveResult>

@@ -7,6 +7,7 @@ import { chat, deleteChat, listChats, recordChat } from './ai'
 import { openApp, searchApps, watchApps } from './apps'
 import { exportAll, importAll } from './backup'
 import { deleteClip, listClips, pasteClip, watchClipboard } from './clipboard'
+import { initLaunchAtLogin, setLaunchAtLogin } from './loginItem'
 import { deletePreset, listPresets, runPreset, savePreset } from './presets'
 import { deleteScript, listScripts, runScript, saveScript } from './scripts'
 
@@ -114,7 +115,7 @@ const toggle = () => {
   }
 }
 
-const settings = (): Settings => ({ hotkey: HOTKEY })
+const settings = (): Settings => ({ hotkey: HOTKEY, launchAtLogin: app.getLoginItemSettings().openAtLogin })
 
 const registerIpc = () => {
   ipcMain.on('window:hide', () => win?.hide())
@@ -123,6 +124,11 @@ const registerIpc = () => {
     win?.setBounds({ ...anchor, width: WIDTH, height: Math.min(MAX_HEIGHT, Math.max(60, Math.ceil(height))) })
   })
   ipcMain.handle('settings:get', () => settings())
+  ipcMain.handle('settings:launchAtLogin', (_e, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') throw new Error('Invalid value')
+    setLaunchAtLogin(enabled)
+    return settings()
+  })
   ipcMain.handle('apps:search', (_e, query: unknown) => (typeof query === 'string' ? searchApps(query) : []))
   ipcMain.handle('apps:open', async (_e, appPath: unknown) => {
     if (typeof appPath !== 'string') throw new Error('Invalid path')
@@ -256,6 +262,7 @@ if (!app.isPackaged) {
 
 app.whenReady().then(() => {
   app.dock?.hide()
+  initLaunchAtLogin()
   registerIpc()
   watchApps()
   watchClipboard()
