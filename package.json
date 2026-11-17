@@ -1,7 +1,7 @@
 {
   "name": "laser-beam",
   "productName": "Laser Beam",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "description": "A Spotlight replacement",
   "main": ".vite/build/main.cjs",
   "private": true,

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { SavedScript, ScriptDraft, ScriptResult } from '../../shared/api'
+import { type SavedScript, type ScriptDraft, type ScriptResult, TERMINALS, type TerminalApp } from '../../shared/api'
 
-const EMPTY: ScriptDraft = { id: null, name: '', command: '' }
+const EMPTY: ScriptDraft = { id: null, name: '', command: '', runIn: 'internal', terminal: 'Terminal' }
 
 type Run = { result: ScriptResult; ms: number }
 
@@ -21,7 +21,12 @@ const ScriptsSection = () => {
   }, [])
 
   const saved = scripts.find((s) => s.id === draft.id)
-  const dirty = saved ? saved.name !== draft.name || saved.command !== draft.command : !!(draft.name || draft.command)
+  const dirty = saved
+    ? saved.name !== draft.name ||
+      saved.command !== draft.command ||
+      saved.runIn !== draft.runIn ||
+      saved.terminal !== draft.terminal
+    : !!(draft.name || draft.command)
 
   const confirmDiscard = () => !dirty || window.confirm('Discard unsaved changes?')
 
@@ -61,6 +66,11 @@ const ScriptsSection = () => {
 
   const test = useCallback(async () => {
     if (!draft.command.trim() || running) return
+    if (draft.runIn === 'terminal') {
+      const err = await window.api.runInTerminal(draft.command, draft.terminal)
+      setError(err)
+      return
+    }
     setRunning(true)
     setRun(null)
     const start = performance.now()
@@ -72,7 +82,7 @@ const ScriptsSection = () => {
     } finally {
       setRunning(false)
     }
-  }, [draft.command, running])
+  }, [draft.command, draft.runIn, draft.terminal, running])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -139,6 +149,37 @@ const ScriptsSection = () => {
             onChange={(e) => setDraft({ ...draft, command: e.target.value })}
           />
         </label>
+
+        <div className="run-options">
+          <span className="label">Run</span>
+          <button
+            type="button"
+            className={draft.runIn === 'internal' ? 'chip active' : 'chip'}
+            onClick={() => setDraft({ ...draft, runIn: 'internal' })}
+          >
+            In Laser Beam
+          </button>
+          <button
+            type="button"
+            className={draft.runIn === 'terminal' ? 'chip active' : 'chip'}
+            onClick={() => setDraft({ ...draft, runIn: 'terminal' })}
+          >
+            In a terminal
+          </button>
+          {draft.runIn === 'terminal' && (
+            <select
+              className="field select"
+              value={draft.terminal}
+              onChange={(e) => setDraft({ ...draft, terminal: e.target.value as TerminalApp })}
+            >
+              {TERMINALS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
 
         <div className="actions">
           <button type="button" className="btn primary" onClick={save} disabled={!dirty}>

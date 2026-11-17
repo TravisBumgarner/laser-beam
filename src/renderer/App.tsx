@@ -45,6 +45,7 @@ const App = () => {
   const [chats, setChats] = useState<SavedChat[]>([])
   const [clips, setClips] = useState<ClipEntry[]>([])
   const [running, setRunning] = useState(false)
+  const [todoInstalled, setTodoInstalled] = useState(true)
   const [notice, setNotice] = useState<string | null>(null)
   const [showModes, setShowModes] = useState(false)
   const [scriptResult, setScriptResult] = useState<ScriptResult | null>(null)
@@ -64,6 +65,7 @@ const App = () => {
     window.api.listPresets().then(setPresets)
     window.api.listChats().then(setChats)
     window.api.listClips().then(setClips)
+    window.api.getSettings().then((s) => setTodoInstalled(s.todoInstalled))
     requestAnimationFrame(() => inputRef.current?.focus())
   }, [])
 
@@ -75,7 +77,9 @@ const App = () => {
   useEffect(() => {
     let cancelled = false
     window.api.searchApps(mode === 'apps' ? rest : '').then((r) => {
-      if (!cancelled) setApps(r)
+      if (cancelled) return
+      setApps(r)
+      setSelected(0)
     })
     setSelected(0)
     return () => {
@@ -110,7 +114,12 @@ const App = () => {
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  const runScript = async (command: string) => {
+  const runScript = async (script: SavedScript) => {
+    if (script.runIn === 'terminal') {
+      setNotice(await window.api.runInTerminal(script.command, script.terminal))
+      return
+    }
+    const { command } = script
     setRunning(true)
     setScriptResult(null)
     try {
@@ -125,7 +134,7 @@ const App = () => {
   const q = rest.trim().toLowerCase()
   const rows: Row[] =
     query === '' && showModes
-      ? MODES.map((m) => ({
+      ? MODES.filter((m) => todoInstalled || m.prefix !== 'td_').map((m) => ({
           key: m.prefix,
           label: m.label,
           detail: m.prefix,
@@ -206,12 +215,14 @@ const App = () => {
                           key: s.id,
                           label: s.name,
                           detail: s.command.split('\n')[0],
-                          run: () => runScript(s.command),
+                          run: () => runScript(s),
                         }))
                     : [
                         // Commands that switch the bar into a prefix mode, e.g. picking "Todo Today" starts td_.
                         ...(q
-                          ? COMMANDS.filter((c) => c.label.toLowerCase().includes(q)).map((c) => ({
+                          ? COMMANDS.filter(
+                              (c) => (todoInstalled || c.prefix !== 'td_') && c.label.toLowerCase().includes(q),
+                            ).map((c) => ({
                               key: c.prefix,
                               label: c.label,
                               icon: apps.find((a) => a.name === c.label)?.icon,
@@ -225,8 +236,20 @@ const App = () => {
                             key: a.path,
                             label: a.name,
                             icon: a.icon,
-                            detail: a.kind === 'setting' ? 'System Settings' : undefined,
-                            run: () => window.api.openApp(a.path),
+                            detail:
+                              a.kind === 'setting'
+                                ? 'System Settings'
+                                : a.kind === 'folder'
+                                  ? a.path.replace(/\/[^/]+$/, '') || '/'
+                                  : undefined,
+                            run: () => window.api.openApp(a.path, rest),
+                            remove: a.boosted
+                              ? () =>
+                                  window.api
+                                    .clearPick(rest, a.path)
+                                    .then(() => window.api.searchApps(rest))
+                                    .then(setApps)
+                              : undefined,
                           })),
                       ]
 
@@ -282,7 +305,7 @@ const App = () => {
                   <li
                     key={r.key}
                     className={i === selected ? 'menu-item selected' : 'menu-item'}
-                    onMouseEnter={() => setSelected(i)}
+                    onMouseMove={() => setSelected(i)}
                     onMouseDown={(e) => {
                       e.preventDefault()
                       r.run()
@@ -292,7 +315,12 @@ const App = () => {
                       {r.icon && <img className="app-icon" src={r.icon} alt="" />}
                       {r.label}
                     </span>
-                    {i === selected && !showModes ? <kbd>↵</kbd> : r.detail && <kbd className="mono">{r.detail}</kbd>}
+                    {mode === 'sc' ? (
+                      <pre className="script-preview">{scripts.find((s) => s.id === r.key)?.command}</pre>
+                    ) : (
+                      <kbd className="mono row-detail">{r.detail}</kbd>
+                    )}
+                    <kbd className="row-enter">{i === selected ? '↵' : ''}</kbd>
                   </li>
                 ))}
               </ul>
@@ -309,7 +337,14 @@ const App = () => {
                   )}
                 </div>
               )}
-              <Tips tips={['↑↓ select', '↵ open', ...(rows[selected]?.remove ? ['⌘⌫ delete'] : []), 'esc close']} />
+              <Tips
+                tips={[
+                  '↑↓ select',
+                  '↵ open',
+                  ...(rows[selected]?.remove ? [mode === 'apps' ? '⌘⌫ forget' : '⌘⌫ delete'] : []),
+                  'esc close',
+                ]}
+              />
             </>
           )}
           {mode === 'pr' && presets.length === 0 && (

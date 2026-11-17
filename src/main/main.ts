@@ -1,16 +1,21 @@
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import tty from 'node:tty'
-import { app, BrowserWindow, globalShortcut, ipcMain, screen, shell } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, screen, shell } from 'electron'
 import { UpdateSourceType, updateElectronApp } from 'update-electron-app'
-import { LAYOUT_POSITIONS, type Layout, type Settings } from '../shared/api'
+import { LAYOUT_POSITIONS, type Layout, type Settings, TERMINALS, type TerminalApp } from '../shared/api'
 import { chat, deleteChat, listChats, recordChat } from './ai'
 import { openApp, searchApps, watchApps } from './apps'
-import { exportAll, importAll } from './backup'
+import { exportAll, getSchedule, importAll, setSchedule, startAutoBackup, validSchedule } from './backup'
 import { deleteClip, listClips, pasteClip, watchClipboard } from './clipboard'
+import { buildFolderIndex, listSearchFolders, setSearchFolders, validFolders } from './folders'
+import { clearPick, recordPick } from './history'
+import { currentHotkey, HOTKEYS, type Hotkey, registerHotkey } from './hotkey'
 import { initLaunchAtLogin, setLaunchAtLogin } from './loginItem'
 import { deletePreset, listPresets, runPreset, savePreset } from './presets'
-import { deleteScript, listScripts, runScript, saveScript } from './scripts'
+import { deleteScript, listScripts, runInTerminal, runScript, saveScript } from './scripts'
+import { getTheme, setTheme } from './theme'
+import { checkVersion, markNotesSeen, notesUnseen } from './version'
 
 // update.electronjs.org only answers the all-lowercase owner/repo path.
 updateElectronApp({
@@ -20,7 +25,6 @@ updateElectronApp({
 // Logging to a closed terminal (dev process killed) throws EPIPE; ignore it.
 for (const stream of [process.stdout, process.stderr]) stream.on('error', () => {})
 
-const HOTKEY = 'Alt+Space'
 const WIDTH = 680
 const MAX_HEIGHT = 520
 
@@ -121,7 +125,21 @@ const toggle = () => {
   }
 }
 
-const settings = (): Settings => ({ hotkey: HOTKEY, launchAtLogin: app.getLoginItemSettings().openAtLogin })
+const TODO_TODAY_URL = 'https://travisbumgarner.dev/marketing/todo'
+
+const todoInstalled = () =>
+  app.getApplicationInfoForProtocol('todo-today://').then(
+    () => true,
+    () => false,
+  )
+
+const settings = async (): Promise<Settings> => ({
+  hotkey: currentHotkey(),
+  launchAtLogin: app.getLoginItemSettings().openAtLogin,
+  searchFolders: listSearchFolders(),
+  theme: getTheme(),
+  todoInstalled: await todoInstalled(),
+})
 
 const registerIpc = () => {
   ipcMain.on('window:hide', () => win?.hide())
@@ -135,12 +153,28 @@ const registerIpc = () => {
     setLaunchAtLogin(enabled)
     return settings()
   })
+  ipcMain.handle('settings:theme', (_e, id: unknown) => {
+    if (typeof id !== 'string' || !/^[a-z-]+$/.test(id)) throw new Error('Invalid theme')
+    setTheme(id)
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send('theme:changed', id)
+    return settings()
+  })
+  ipcMain.handle('settings:searchFolders', (_e, folders: unknown) => {
+    if (!validFolders(folders)) throw new Error('Invalid folders')
+    setSearchFolders(folders)
+    return settings()
+  })
   ipcMain.handle('apps:search', (_e, query: unknown) => (typeof query === 'string' ? searchApps(query) : []))
-  ipcMain.handle('apps:open', async (_e, appPath: unknown) => {
+  ipcMain.handle('history:clear', (_e, query: unknown, target: unknown) => {
+    if (typeof query !== 'string' || typeof target !== 'string') throw new Error('Invalid entry')
+    clearPick(query, target)
+  })
+  ipcMain.handle('apps:open', async (_e, appPath: unknown, query: unknown) => {
     if (typeof appPath !== 'string') throw new Error('Invalid path')
     // Open first, then hide: hiding first hands focus back to the previous app, which can
     // immediately steal it from apps that close on blur (like todo-today's menu bar popover).
     await openApp(appPath)
+    if (typeof query === 'string') recordPick(query, appPath)
     win?.hide()
   })
   ipcMain.handle('web:search', async (_e, query: unknown) => {
@@ -153,14 +187,23 @@ const registerIpc = () => {
     if (typeof command !== 'string' || !command.trim()) throw new Error('Invalid command')
     return runScript(command)
   })
+  ipcMain.handle('script:terminal', async (_e, command: unknown, terminal: unknown) => {
+    if (typeof command !== 'string' || !command.trim()) throw new Error('Invalid command')
+    if (!TERMINALS.includes(terminal as TerminalApp)) throw new Error('Invalid terminal')
+    const error = await runInTerminal(command, terminal as TerminalApp)
+    if (!error) win?.hide()
+    return error
+  })
   ipcMain.handle('scripts:list', () => listScripts())
   ipcMain.handle('scripts:save', (_e, draft: unknown) => {
-    const { id, name, command } = (draft ?? {}) as Record<string, unknown>
+    const { id, name, command, runIn, terminal } = (draft ?? {}) as Record<string, unknown>
     if (typeof name !== 'string' || !name.trim() || typeof command !== 'string' || !command.trim()) {
       throw new Error('Name and command are required')
     }
     if (id !== null && typeof id !== 'string') throw new Error('Invalid id')
-    return saveScript({ id, name: name.trim(), command })
+    if (runIn !== 'internal' && runIn !== 'terminal') throw new Error('Invalid run mode')
+    if (!TERMINALS.includes(terminal as TerminalApp)) throw new Error('Invalid terminal')
+    return saveScript({ id, name: name.trim(), command, runIn, terminal: terminal as TerminalApp })
   })
   ipcMain.handle('presets:list', () => listPresets())
   ipcMain.handle('presets:save', (_e, draft: unknown) => {
@@ -196,6 +239,16 @@ const registerIpc = () => {
     return error
   })
   ipcMain.on('settings:open', () => openSettings())
+  ipcMain.handle('settings:hotkey', (_e, key: unknown) => {
+    if (!HOTKEYS.includes(key as Hotkey)) throw new Error('Invalid hotkey')
+    return registerHotkey(toggle, key as Hotkey)
+  })
+  ipcMain.on('keyboard:shortcuts', () =>
+    shell.openExternal('x-apple.systempreferences:com.apple.Keyboard-Settings.extension'),
+  )
+  ipcMain.on('todo:get', () => shell.openExternal(TODO_TODAY_URL))
+  ipcMain.handle('app:info', () => ({ version: app.getVersion(), notesUnseen: notesUnseen() }))
+  ipcMain.handle('app:notesSeen', () => markNotesSeen())
   ipcMain.handle('todo:add', async (_e, title: unknown) => {
     if (typeof title !== 'string') throw new Error('Invalid title')
     const trimmed = title.trim()
@@ -228,7 +281,18 @@ const registerIpc = () => {
       target.focus()
     }
   }
+  ipcMain.handle('dialog:pickFolder', (e) =>
+    withDialog(BrowserWindow.fromWebContents(e.sender), async (w) => {
+      const { canceled, filePaths } = await dialog.showOpenDialog(w, { properties: ['openDirectory'] })
+      return canceled ? null : (filePaths[0] ?? null)
+    }),
+  )
   ipcMain.handle('backup:export', (e) => withDialog(BrowserWindow.fromWebContents(e.sender), exportAll))
+  ipcMain.handle('backup:schedule:get', () => getSchedule())
+  ipcMain.handle('backup:schedule:set', (_e, schedule: unknown) => {
+    if (!validSchedule(schedule)) throw new Error('Invalid schedule')
+    return setSchedule(schedule)
+  })
   ipcMain.handle('backup:import', (e) => withDialog(BrowserWindow.fromWebContents(e.sender), importAll))
   ipcMain.handle('ai:chat', async (_e, prompt: unknown, sessionId: unknown) => {
     if (typeof prompt !== 'string' || !prompt.trim()) return { ok: false, error: 'Empty prompt' }
@@ -268,14 +332,17 @@ if (!app.isPackaged) {
 
 app.whenReady().then(() => {
   app.dock?.hide()
+  const updated = checkVersion()
   initLaunchAtLogin()
+  buildFolderIndex()
+  startAutoBackup()
   registerIpc()
   watchApps()
   watchClipboard()
   createWindow()
-  if (!globalShortcut.register(HOTKEY, toggle)) {
-    console.error(`Failed to register ${HOTKEY}`)
-  }
+  if (updated) openSettings()
+  const hotkeyError = registerHotkey(toggle)
+  if (hotkeyError) console.error(hotkeyError)
 })
 
 // Windows only ever show the bundled renderer: block navigation and new windows.
