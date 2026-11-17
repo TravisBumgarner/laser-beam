@@ -2,9 +2,15 @@ export type ChatMessage = { role: 'user' | 'assistant'; content: string }
 
 export type ScriptResult = { stdout: string; stderr: string; code: number | null }
 
-export type SavedScript = { id: string; name: string; command: string }
+export type RunIn = 'internal' | 'terminal'
 
-export type ScriptDraft = { id: string | null; name: string; command: string }
+export const TERMINALS = ['Terminal', 'iTerm', 'Ghostty', 'kitty', 'WezTerm', 'Alacritty'] as const
+
+export type TerminalApp = (typeof TERMINALS)[number]
+
+export type SavedScript = { id: string; name: string; command: string; runIn: RunIn; terminal: TerminalApp }
+
+export type ScriptDraft = { id: string | null; name: string; command: string; runIn: RunIn; terminal: TerminalApp }
 
 export type SaveResult = { id: string; scripts: SavedScript[] }
 
@@ -35,7 +41,13 @@ export type PresetDraft = { id: string | null; name: string; layout: Layout; ste
 
 export type PresetSaveResult = { id: string; presets: Preset[] }
 
-export type AppResult = { name: string; path: string; icon: string; kind: 'app' | 'setting' }
+export type AppResult = {
+  name: string
+  path: string
+  icon: string
+  kind: 'app' | 'setting' | 'folder'
+  boosted: boolean
+}
 
 export type SavedChat = { id: string; title: string; messages: ChatMessage[] }
 
@@ -43,18 +55,43 @@ export type ChatResult = { ok: true; text: string; sessionId: string } | { ok: f
 
 export type ClipEntry = { text: string; copiedAt: number }
 
-export type Settings = { hotkey: string; launchAtLogin: boolean }
+// depth null = unlimited; 0 = only the folder's direct subfolders.
+export type SearchFolder = { path: string; depth: number | null }
+
+export type Settings = {
+  hotkey: string
+  launchAtLogin: boolean
+  searchFolders: SearchFolder[]
+  theme: string
+  todoInstalled: boolean
+}
+
+export type BackupFrequency = 'off' | 'daily' | 'weekly' | 'monthly'
+
+// weekday: 0 = Sunday. Monthly backups run on the 1st.
+export type BackupSchedule = { frequency: BackupFrequency; weekday: number; folder: string; lastRun: number | null }
 
 export type Api = {
   hide: () => void
   onReset: (cb: () => void) => () => void
   resize: (height: number) => void
   searchApps: (query: string) => Promise<AppResult[]>
-  openApp: (path: string) => Promise<void>
+  openApp: (path: string, query?: string) => Promise<void>
+  clearPick: (query: string, path: string) => Promise<void>
   searchWeb: (query: string) => Promise<void>
   getSettings: () => Promise<Settings>
   setLaunchAtLogin: (enabled: boolean) => Promise<Settings>
   runScript: (command: string) => Promise<ScriptResult>
+  runInTerminal: (command: string, terminal: TerminalApp) => Promise<string | null>
+  setSearchFolders: (folders: SearchFolder[]) => Promise<Settings>
+  setTheme: (id: string) => Promise<Settings>
+  getTodoToday: () => void
+  setHotkey: (key: string) => Promise<string | null>
+  openKeyboardShortcuts: () => void
+  getAppInfo: () => Promise<{ version: string; notesUnseen: boolean }>
+  markNotesSeen: () => Promise<void>
+  onThemeChange: (cb: (id: string) => void) => () => void
+  pickFolder: () => Promise<string | null>
   listScripts: () => Promise<SavedScript[]>
   saveScript: (draft: ScriptDraft) => Promise<SaveResult>
   openSettings: () => void
@@ -62,6 +99,8 @@ export type Api = {
   deleteScript: (id: string) => Promise<SavedScript[]>
   exportAll: () => Promise<string | null>
   importAll: () => Promise<string | null>
+  getBackupSchedule: () => Promise<BackupSchedule>
+  setBackupSchedule: (schedule: Omit<BackupSchedule, 'lastRun'>) => Promise<BackupSchedule>
   listPresets: () => Promise<Preset[]>
   savePreset: (draft: PresetDraft) => Promise<PresetSaveResult>
   deletePreset: (id: string) => Promise<Preset[]>

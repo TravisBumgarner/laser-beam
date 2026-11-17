@@ -14,6 +14,7 @@ const GROUPS = (hotkey: string) => [
       ['Open config', 'co_'],
       ['Move selection', '↑ ↓'],
       ['Open selection', '↵'],
+      ['Forget a remembered result', '⌘⌫'],
       ['Back', '⌘['],
       ['Close', 'esc'],
     ],
@@ -32,11 +33,13 @@ const HotkeysSection = () => {
   const [hotkey, setHotkey] = useState('')
 
   useEffect(() => {
-    window.api.getSettings().then((s) => setHotkey(s.hotkey.replace('Alt', '⌥').replace('+', ' ')))
+    window.api
+      .getSettings()
+      .then((s) => setHotkey(s.hotkey.replace('Alt', '⌥').replace('Command', '⌘').replace('+', ' ')))
   }, [])
 
   return (
-    <div className="section">
+    <div className="section hotkeys">
       <h2 className="section-title">Hotkeys</h2>
       {GROUPS(hotkey).map((group) => (
         <div key={group.title} className="hotkey-group">
