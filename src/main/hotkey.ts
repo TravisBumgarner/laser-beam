@@ -22,17 +22,17 @@ const saved = (): Hotkey => {
 
 let active: Hotkey = DEFAULT
 
-// macOS lets both apps claim ⌘Space, so check Spotlight's own shortcut (symbolic hotkey 64).
-// A missing entry means it's still on at its default.
+// macOS lets both apps claim ⌘Space, so check Spotlight's own shortcut (symbolic hotkey 64): it owns ⌘Space
+// when it's enabled and still bound to Space (key code 49) with Command (1048576). Missing means the default, ⌘Space.
 const spotlightOwnsCmdSpace = () => {
   try {
     const json = execFileSync('/bin/sh', [
       '-c',
-      'defaults export com.apple.symbolichotkeys - | plutil -extract AppleSymbolicHotKeys.64.enabled json -o - -',
-    ])
-      .toString()
-      .trim()
-    return json !== 'false'
+      'defaults export com.apple.symbolichotkeys - | plutil -extract AppleSymbolicHotKeys.64 json -o - -',
+    ]).toString()
+    const entry = JSON.parse(json) as { enabled?: boolean; value?: { parameters?: number[] } }
+    const [, keyCode, modifiers] = entry.value?.parameters ?? []
+    return entry.enabled !== false && keyCode === 49 && modifiers === 1048576
   } catch {
     return true
   }
