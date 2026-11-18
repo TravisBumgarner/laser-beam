@@ -1,10 +1,12 @@
 import { execFile, spawn } from 'node:child_process'
+import { EventEmitter } from 'node:events'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { app } from 'electron'
 import type { SearchFolder } from '../shared/api'
 
-const DEFAULT: SearchFolder[] = [{ path: '/', depth: null }]
+const DEFAULT: SearchFolder[] = [{ path: os.homedir(), depth: 1 }]
 
 const file = () => path.join(app.getPath('userData'), 'search-folders.json')
 
@@ -51,6 +53,16 @@ const wanted = (root: SearchFolder, full: string) =>
 let index = new Map<string, string>()
 let watchers: fs.FSWatcher[] = []
 let generation = 0
+let indexing = false
+
+// Emits 'indexing' with true/false as the index starts and finishes building.
+export const folderIndexEvents = new EventEmitter()
+export const isIndexing = () => indexing
+
+const setIndexing = (value: boolean) => {
+  indexing = value
+  folderIndexEvents.emit('indexing', value)
+}
 
 const add = (target: Map<string, string>, full: string) => target.set(full, path.basename(full).toLowerCase())
 
@@ -83,6 +95,7 @@ const onChange = (root: SearchFolder, filename: string | null) => {
 
 export const buildFolderIndex = async () => {
   const gen = ++generation
+  setIndexing(true)
   const roots = listSearchFolders()
   for (const w of watchers) w.close()
   watchers = roots.flatMap((root) => {
@@ -95,7 +108,9 @@ export const buildFolderIndex = async () => {
   // The first build fills the live index so results show up while it loads; rebuilds swap in when done.
   const target = index.size === 0 ? index : new Map<string, string>()
   await Promise.all(roots.map((root) => load(root, target, gen)))
-  if (gen === generation) index = target
+  if (gen !== generation) return
+  index = target
+  setIndexing(false)
 }
 
 export const searchFolders = (text: string) => {

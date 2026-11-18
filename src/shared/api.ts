@@ -8,9 +8,62 @@ export const TERMINALS = ['Terminal', 'iTerm', 'Ghostty', 'kitty', 'WezTerm', 'A
 
 export type TerminalApp = (typeof TERMINALS)[number]
 
-export type SavedScript = { id: string; name: string; command: string; runIn: RunIn; terminal: TerminalApp }
+// A value asked for at run time and injected into the command wherever {{name}} appears.
+export type ScriptParam = { name: string; default: string }
 
-export type ScriptDraft = { id: string | null; name: string; command: string; runIn: RunIn; terminal: TerminalApp }
+export const PARAM_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+export const validParams = (value: unknown): value is ScriptParam[] =>
+  Array.isArray(value) &&
+  value.every((p) => p && typeof p.name === 'string' && PARAM_NAME.test(p.name) && typeof p.default === 'string')
+
+// Quotes a value to suit where {{name}} sits, so it's always one literal word that can't break or extend the command:
+// inside "…" it's escaped, inside '…' it closes and reopens the quote, and anywhere else it's single-quoted.
+const quoteFor = (state: 'none' | 'single' | 'double', value: string) => {
+  if (state === 'double') return value.replace(/[\\"$`]/g, '\\$&')
+  if (state === 'single') return value.replaceAll("'", "'\\''")
+  return `'${value.replaceAll("'", "'\\''")}'`
+}
+
+export const fillParams = (command: string, params: ScriptParam[], values: string[]) => {
+  const byName = new Map(params.map((p, i) => [p.name, values[i] ?? '']))
+  let state: 'none' | 'single' | 'double' = 'none'
+  let out = ''
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i]
+    const match = /^\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/.exec(command.slice(i, i + 200))
+    if (match && byName.has(match[1])) {
+      out += quoteFor(state, byName.get(match[1]) as string)
+      i += match[0].length - 1
+      continue
+    }
+    out += ch
+    if (ch === '\\' && state !== 'single') {
+      out += command[i + 1] ?? ''
+      i++
+    } else if (ch === "'" && state !== 'double') state = state === 'single' ? 'none' : 'single'
+    else if (ch === '"' && state !== 'single') state = state === 'double' ? 'none' : 'double'
+  }
+  return out
+}
+
+export type PermissionId = 'accessibility' | 'system-events' | 'terminal' | 'iterm'
+
+// 'unknown' means macOS hasn't been asked yet.
+export type PermissionStatus = 'granted' | 'missing' | 'unknown'
+
+export type Permission = { id: PermissionId; label: string; why: string; status: PermissionStatus }
+
+export type SavedScript = {
+  id: string
+  name: string
+  command: string
+  runIn: RunIn
+  terminal: TerminalApp
+  params: ScriptParam[]
+}
+
+export type ScriptDraft = Omit<SavedScript, 'id'> & { id: string | null }
 
 export type SaveResult = { id: string; scripts: SavedScript[] }
 
@@ -88,9 +141,14 @@ export type Api = {
   getTodoToday: () => void
   setHotkey: (key: string) => Promise<string | null>
   openKeyboardShortcuts: () => void
-  getAppInfo: () => Promise<{ version: string; notesUnseen: boolean }>
+  getAppInfo: () => Promise<{ version: string; notesUnseen: boolean; setupNeeded: boolean }>
   markNotesSeen: () => Promise<void>
+  listPermissions: () => Promise<Permission[]>
+  requestPermission: (id: PermissionId) => Promise<Permission[]>
+  completeSetup: () => Promise<void>
   onThemeChange: (cb: (id: string) => void) => () => void
+  isIndexing: () => Promise<boolean>
+  onIndexing: (cb: (indexing: boolean) => void) => () => void
   pickFolder: () => Promise<string | null>
   listScripts: () => Promise<SavedScript[]>
   saveScript: (draft: ScriptDraft) => Promise<SaveResult>

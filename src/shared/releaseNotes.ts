@@ -1,6 +1,19 @@
 // Newest first. Add an entry with every version bump; the app shows the current version's notes once after updating.
 export const RELEASE_NOTES: { version: string; notes: string[] }[] = [
   {
+    version: '0.2.0',
+    notes: [
+      'Script params: add them in the editor, use {{name}} in the command, and fill them in right in the search bar.',
+      'Redesigned script editor.',
+      "Setup wizard on first launch, plus a Permissions tab, so macOS permission prompts don't interrupt you later.",
+      'Laser Beam now opens over full-screen apps.',
+      'Presets open new windows on your current desktop.',
+      'Shows an Indexing badge while folders are being indexed.',
+      'New installs search your home folder, one level deep.',
+      'Hovering no longer selects a result until the mouse moves.',
+    ],
+  },
+  {
     version: '0.1.0',
     notes: [
       'Folder search: find folders anywhere on your Mac. Pick which folders and how deep.',

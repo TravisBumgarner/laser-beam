@@ -11,6 +11,7 @@ import {
   type ScriptResult,
   TERMINALS,
   type TerminalApp,
+  validParams,
 } from '../shared/api'
 
 export const runScript = (command: string) =>
@@ -84,6 +85,7 @@ const normalize = (s: Partial<SavedScript> & SavedScript): SavedScript => ({
   command: s.command,
   runIn: s.runIn === 'terminal' ? 'terminal' : 'internal',
   terminal: TERMINALS.includes(s.terminal) ? s.terminal : 'Terminal',
+  params: validParams(s.params) ? s.params : [],
 })
 
 const file = () => path.join(app.getPath('userData'), 'scripts.json')

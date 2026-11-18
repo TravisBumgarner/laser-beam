@@ -7,6 +7,7 @@ const file = () => path.join(app.getPath('userData'), 'last-seen-version')
 const earlierInstall = () => fs.existsSync(path.join(app.getPath('userData'), 'login-item-initialized'))
 
 let unseen = false
+let fresh = false
 
 // Call before anything writes first-run markers. Fresh installs skip the notes; updates show them once.
 export const checkVersion = () => {
@@ -17,11 +18,14 @@ export const checkVersion = () => {
     // Never recorded.
   }
   unseen = last ? last !== app.getVersion() : earlierInstall()
+  fresh = !last && !earlierInstall()
   if (!unseen) markNotesSeen()
   return unseen
 }
 
 export const notesUnseen = () => unseen
+
+export const isFreshInstall = () => fresh
 
 export const markNotesSeen = () => {
   unseen = false

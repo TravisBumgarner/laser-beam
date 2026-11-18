@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { type SavedScript, type ScriptDraft, type ScriptResult, TERMINALS, type TerminalApp } from '../../shared/api'
+import {
+  fillParams,
+  type SavedScript,
+  type ScriptDraft,
+  type ScriptParam,
+  type ScriptResult,
+  TERMINALS,
+  type TerminalApp,
+} from '../../shared/api'
 
-const EMPTY: ScriptDraft = { id: null, name: '', command: '', runIn: 'internal', terminal: 'Terminal' }
+const EMPTY: ScriptDraft = { id: null, name: '', command: '', runIn: 'internal', terminal: 'Terminal', params: [] }
 
 type Run = { result: ScriptResult; ms: number }
 
@@ -25,8 +33,9 @@ const ScriptsSection = () => {
     ? saved.name !== draft.name ||
       saved.command !== draft.command ||
       saved.runIn !== draft.runIn ||
-      saved.terminal !== draft.terminal
-    : !!(draft.name || draft.command)
+      saved.terminal !== draft.terminal ||
+      JSON.stringify(saved.params) !== JSON.stringify(draft.params)
+    : !!(draft.name || draft.command || draft.params.length)
 
   const confirmDiscard = () => !dirty || window.confirm('Discard unsaved changes?')
 
@@ -64,10 +73,19 @@ const ScriptsSection = () => {
     setRun(null)
   }
 
+  const setParam = (i: number, patch: Partial<ScriptParam>) =>
+    setDraft({ ...draft, params: draft.params.map((p, j) => (j === i ? { ...p, ...patch } : p)) })
+
+  // Testing uses each param's default value.
   const test = useCallback(async () => {
     if (!draft.command.trim() || running) return
+    const command = fillParams(
+      draft.command,
+      draft.params,
+      draft.params.map((p) => p.default),
+    )
     if (draft.runIn === 'terminal') {
-      const err = await window.api.runInTerminal(draft.command, draft.terminal)
+      const err = await window.api.runInTerminal(command, draft.terminal)
       setError(err)
       return
     }
@@ -75,14 +93,14 @@ const ScriptsSection = () => {
     setRun(null)
     const start = performance.now()
     try {
-      const result = await window.api.runScript(draft.command)
+      const result = await window.api.runScript(command)
       setRun({ result, ms: Math.round(performance.now() - start) })
     } catch (e) {
       setRun({ result: { stdout: '', stderr: String(e), code: 1 }, ms: 0 })
     } finally {
       setRunning(false)
     }
-  }, [draft.command, draft.runIn, draft.terminal, running])
+  }, [draft.command, draft.params, draft.runIn, draft.terminal, running])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -128,73 +146,89 @@ const ScriptsSection = () => {
         </ul>
       </aside>
 
-      <main className="editor">
-        <label className="label">
-          Name
-          <input
-            ref={nameRef}
-            className="field"
-            placeholder="e.g. Pull all repos"
-            value={draft.name}
-            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-          />
-        </label>
-        <label className="label grow">
-          Command <span className="muted">(runs in zsh from ~)</span>
+      <main className="editor script-editor">
+        <div className="se-head">
+          <label className="se-name">
+            <span className="se-label">Name</span>
+            <input
+              ref={nameRef}
+              placeholder="e.g. Pull all repos"
+              value={draft.name}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            />
+          </label>
+          <select
+            className="field select"
+            value={draft.runIn === 'internal' ? 'internal' : draft.terminal}
+            onChange={(e) =>
+              setDraft(
+                e.target.value === 'internal'
+                  ? { ...draft, runIn: 'internal' }
+                  : { ...draft, runIn: 'terminal', terminal: e.target.value as TerminalApp },
+              )
+            }
+          >
+            <option value="internal">Run in Laser Beam</option>
+            {TERMINALS.map((t) => (
+              <option key={t} value={t}>
+                Run in {t}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="se-box">
+          <div className="se-box-head">
+            <span className="se-label">Command</span>
+            <span className="muted mono">zsh · ~</span>
+          </div>
           <textarea
-            className="field mono code"
+            className="mono se-code"
             placeholder="cd ~/Programming && git -C todo-today pull"
             spellCheck={false}
             value={draft.command}
             onChange={(e) => setDraft({ ...draft, command: e.target.value })}
           />
-        </label>
-
-        <div className="run-options">
-          <span className="label">Run</span>
-          <button
-            type="button"
-            className={draft.runIn === 'internal' ? 'chip active' : 'chip'}
-            onClick={() => setDraft({ ...draft, runIn: 'internal' })}
-          >
-            In Laser Beam
-          </button>
-          <button
-            type="button"
-            className={draft.runIn === 'terminal' ? 'chip active' : 'chip'}
-            onClick={() => setDraft({ ...draft, runIn: 'terminal' })}
-          >
-            In a terminal
-          </button>
-          {draft.runIn === 'terminal' && (
-            <select
-              className="field select"
-              value={draft.terminal}
-              onChange={(e) => setDraft({ ...draft, terminal: e.target.value as TerminalApp })}
-            >
-              {TERMINALS.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          )}
         </div>
 
-        <div className="actions">
-          <button type="button" className="btn primary" onClick={save} disabled={!dirty}>
-            {saved ? 'Save' : 'Create'} <kbd>⌘S</kbd>
-          </button>
-          <button type="button" className="btn" onClick={test} disabled={running || !draft.command.trim()}>
-            {running ? 'Running…' : 'Test'} <kbd>⌘↵</kbd>
-          </button>
-          <span className="spacer" />
-          {dirty && <span className="muted">Unsaved changes</span>}
-          {saved && (
-            <button type="button" className="btn danger" onClick={remove}>
-              Delete
+        <div className="se-params">
+          <div className="se-params-head">
+            <span className="se-label">Params</span>
+            <span className="muted">
+              use as <code className="mono">{'{{name}}'}</code>
+            </span>
+            <span className="spacer" />
+            <button
+              type="button"
+              className="se-add"
+              onClick={() => setDraft({ ...draft, params: [...draft.params, { name: '', default: '' }] })}
+            >
+              + Add
             </button>
-          )}
+          </div>
+          {draft.params.map((p, i) => (
+            <div className="se-param" key={i}>
+              <input
+                className="mono"
+                placeholder="name"
+                spellCheck={false}
+                value={p.name}
+                onChange={(e) => setParam(i, { name: e.target.value })}
+              />
+              <input
+                placeholder="default value"
+                value={p.default}
+                onChange={(e) => setParam(i, { default: e.target.value })}
+              />
+              <button
+                type="button"
+                title="Remove param"
+                onClick={() => setDraft({ ...draft, params: draft.params.filter((_, j) => j !== i) })}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
         </div>
 
         {error && <div className="error">{error}</div>}
@@ -212,6 +246,23 @@ const ScriptsSection = () => {
             </pre>
           </div>
         )}
+        <span className="spacer" />
+
+        <div className="actions">
+          <button type="button" className="btn primary" onClick={save} disabled={!dirty}>
+            {saved ? 'Save' : 'Create'} <kbd>⌘S</kbd>
+          </button>
+          <button type="button" className="btn" onClick={test} disabled={running || !draft.command.trim()}>
+            {running ? 'Running…' : 'Test'} <kbd>⌘↵</kbd>
+          </button>
+          <span className="spacer" />
+          {dirty && <span className="muted se-unsaved">Unsaved</span>}
+          {saved && (
+            <button type="button" className="btn danger se-delete" onClick={remove}>
+              Delete
+            </button>
+          )}
+        </div>
       </main>
     </div>
   )
