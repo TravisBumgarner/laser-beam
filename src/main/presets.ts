@@ -112,7 +112,9 @@ const launchCommand = async (appPath: string, bid: string, newWindow: boolean) =
     ])
     return `${sh(path.join(appPath, 'Contents/MacOS', exe))} --new-window >/dev/null 2>&1 &`
   }
-  return `open -na ${sh(appPath)} --args --new-window`
+  // -g keeps the app in the background until its new window exists; activating it first would jump to the Space
+  // holding its other windows, and the new window would open there instead of on the current one.
+  return `open -gna ${sh(appPath)} --args --new-window`
 }
 
 export const runPreset = async (preset: Preset): Promise<string | null> => {

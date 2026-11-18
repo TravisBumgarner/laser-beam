@@ -24,10 +24,19 @@ const api: Api = {
   openKeyboardShortcuts: () => ipcRenderer.send('keyboard:shortcuts'),
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   markNotesSeen: () => ipcRenderer.invoke('app:notesSeen'),
+  listPermissions: () => ipcRenderer.invoke('permissions:list'),
+  requestPermission: (id) => ipcRenderer.invoke('permissions:request', id),
+  completeSetup: () => ipcRenderer.invoke('setup:complete'),
   onThemeChange: (cb) => {
     const listener = (_e: unknown, id: string) => cb(id)
     ipcRenderer.on('theme:changed', listener)
     return () => ipcRenderer.removeListener('theme:changed', listener)
+  },
+  isIndexing: () => ipcRenderer.invoke('folders:indexing'),
+  onIndexing: (cb) => {
+    const listener = (_e: unknown, value: boolean) => cb(value)
+    ipcRenderer.on('folders:indexing', listener)
+    return () => ipcRenderer.removeListener('folders:indexing', listener)
   },
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   listScripts: () => ipcRenderer.invoke('scripts:list'),

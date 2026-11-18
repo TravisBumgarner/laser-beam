@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { AppResult, ClipEntry, Preset, SavedChat, SavedScript, ScriptResult } from '../shared/api'
+import {
+  type AppResult,
+  type ClipEntry,
+  fillParams,
+  type Preset,
+  type SavedChat,
+  type SavedScript,
+  type ScriptResult,
+} from '../shared/api'
 import AiPanel from './panels/AiPanel'
 import Tips from './Tips'
 
-type View = 'search' | 'ai'
+type View = 'search' | 'ai' | 'params'
 
 type Row = { key: string; label: string; detail?: string; icon?: string; run: () => void; remove?: () => void }
 
@@ -49,8 +57,13 @@ const App = () => {
   const [notice, setNotice] = useState<string | null>(null)
   const [showModes, setShowModes] = useState(false)
   const [scriptResult, setScriptResult] = useState<ScriptResult | null>(null)
+  const [indexing, setIndexing] = useState(false)
+  // The script waiting on param values, and what's been typed for each.
+  const [pending, setPending] = useState<{ script: SavedScript; values: string[] } | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  // Chromium fires mousemove when the window opens or rows shift under a still cursor; only real movement selects.
+  const pointer = useRef<{ x: number; y: number } | null>(null)
 
   const { mode, rest } = parse(query)
 
@@ -58,6 +71,7 @@ const App = () => {
     setView('search')
     setQuery('')
     setSelected(0)
+    pointer.current = null
     setScriptResult(null)
     setNotice(null)
     setShowModes(false)
@@ -67,6 +81,11 @@ const App = () => {
     window.api.listClips().then(setClips)
     window.api.getSettings().then((s) => setTodoInstalled(s.todoInstalled))
     requestAnimationFrame(() => inputRef.current?.focus())
+  }, [])
+
+  useEffect(() => {
+    window.api.isIndexing().then(setIndexing)
+    return window.api.onIndexing(setIndexing)
   }, [])
 
   useEffect(() => {
@@ -114,12 +133,17 @@ const App = () => {
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  const runScript = async (script: SavedScript) => {
-    if (script.runIn === 'terminal') {
-      setNotice(await window.api.runInTerminal(script.command, script.terminal))
+  const runScript = async (script: SavedScript, values?: string[]) => {
+    if (script.params.length > 0 && !values) {
+      setPending({ script, values: script.params.map(() => '') })
+      setView('params')
       return
     }
-    const { command } = script
+    const command = fillParams(script.command, script.params, values ?? [])
+    if (script.runIn === 'terminal') {
+      setNotice(await window.api.runInTerminal(command, script.terminal))
+      return
+    }
     setRunning(true)
     setScriptResult(null)
     try {
@@ -297,6 +321,7 @@ const App = () => {
               onKeyDown={onSearchKeyDown}
             />
             {query === '' && !showModes && <span className="down-hint">↓</span>}
+            {indexing && <span className="indexing-badge">Indexing…</span>}
           </div>
           {rows.length > 0 && (
             <>
@@ -305,7 +330,11 @@ const App = () => {
                   <li
                     key={r.key}
                     className={i === selected ? 'menu-item selected' : 'menu-item'}
-                    onMouseMove={() => setSelected(i)}
+                    onMouseMove={(e) => {
+                      const last = pointer.current
+                      pointer.current = { x: e.screenX, y: e.screenY }
+                      if (last && (last.x !== e.screenX || last.y !== e.screenY)) setSelected(i)
+                    }}
                     onMouseDown={(e) => {
                       e.preventDefault()
                       r.run()
@@ -360,6 +389,41 @@ const App = () => {
         </>
       )}
       {view === 'ai' && <AiPanel initialPrompt={aiPrompt} initialChat={aiChat} />}
+      {view === 'params' && pending && (
+        <>
+          <form
+            className="search-row param-bar"
+            onSubmit={(e) => {
+              e.preventDefault()
+              setView('search')
+              // A blank param falls back to its default.
+              runScript(
+                pending.script,
+                pending.script.params.map((p, i) => pending.values[i] || p.default),
+              )
+              requestAnimationFrame(() => inputRef.current?.focus())
+            }}
+          >
+            <span className="param-script">sc_ {pending.script.name}</span>
+            {pending.script.params.map((p, i) => (
+              <input
+                key={p.name}
+                className="param-input"
+                autoFocus={i === 0}
+                spellCheck={false}
+                placeholder={p.default || p.name}
+                title={p.name}
+                value={pending.values[i]}
+                onChange={(e) =>
+                  setPending({ ...pending, values: pending.values.map((v, j) => (j === i ? e.target.value : v)) })
+                }
+              />
+            ))}
+            <button type="submit" hidden />
+          </form>
+          <Tips tips={['tab next', '↵ run', '⌘[ back', 'esc close']} />
+        </>
+      )}
     </div>
   )
 }

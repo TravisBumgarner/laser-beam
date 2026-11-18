@@ -3,10 +3,12 @@ import { RELEASE_NOTES } from '../../shared/releaseNotes'
 import BackupSection from './BackupSection'
 import GeneralSection from './GeneralSection'
 import HotkeysSection from './HotkeysSection'
+import PermissionsSection from './PermissionsSection'
 import PresetsSection from './PresetsSection'
 import ReleaseNotesSection from './ReleaseNotesSection'
 import ScriptsSection from './ScriptsSection'
 import SearchSection from './SearchSection'
+import SetupWizard from './SetupWizard'
 import ThemeSection from './ThemeSection'
 
 const SECTIONS = [
@@ -16,6 +18,7 @@ const SECTIONS = [
   { id: 'scripts', label: 'Scripts', Component: ScriptsSection },
   { id: 'presets', label: 'Presets', Component: PresetsSection },
   { id: 'backup', label: 'Backup', Component: BackupSection },
+  { id: 'permissions', label: 'Permissions', Component: PermissionsSection },
 ] as const
 
 // Pinned to the bottom left of the sidebar.
@@ -30,12 +33,14 @@ const SettingsWindow = () => {
   const [active, setActive] = useState<SectionId>('general')
   const [version, setVersion] = useState('')
   const [showNotes, setShowNotes] = useState(false)
+  const [showSetup, setShowSetup] = useState(false)
   const { Component } = [...SECTIONS, ...FOOTER_SECTIONS].find((s) => s.id === active) ?? SECTIONS[0]
 
   useEffect(() => {
     window.api.getAppInfo().then((info) => {
       setVersion(info.version)
       setShowNotes(info.notesUnseen)
+      setShowSetup(info.setupNeeded)
     })
   }, [])
 
@@ -66,8 +71,9 @@ const SettingsWindow = () => {
         {FOOTER_SECTIONS.map(navButton)}
         <div className="nav-version muted">v{version}</div>
       </nav>
-      <Component />
-      {showNotes && current && (
+      <Component onRunSetup={() => setShowSetup(true)} />
+      {showSetup && <SetupWizard onClose={() => setShowSetup(false)} />}
+      {!showSetup && showNotes && current && (
         <div className="modal-backdrop">
           <div className="modal">
             <h2 className="section-title">What's new in {current.version}</h2>
