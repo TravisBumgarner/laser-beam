@@ -1,8 +1,10 @@
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { app, shell, systemPreferences } from 'electron'
 import type { Permission, PermissionId, PermissionStatus } from '../shared/api'
+import { buildFolderIndex } from './folders'
 
 type Target = { id: PermissionId; label: string; why: string; bundleId?: string; appPath?: string }
 
@@ -11,6 +13,11 @@ const TARGETS: Target[] = [
     id: 'accessibility',
     label: 'Accessibility',
     why: 'Pastes clipboard history into the app you were using and moves windows for presets.',
+  },
+  {
+    id: 'files',
+    label: 'Files & Folders: Desktop, Documents, Downloads',
+    why: 'Lets folder search find Desktop, Documents and Downloads and the folders inside them.',
   },
   {
     id: 'system-events',
@@ -36,6 +43,22 @@ const TARGETS: Target[] = [
 
 const ACCESSIBILITY_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'
 const AUTOMATION_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Automation'
+const FILES_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders'
+
+const PROTECTED_FOLDERS = ['Desktop', 'Documents', 'Downloads'].map((name) => path.join(os.homedir(), name))
+
+// Reading each folder makes macOS show its Allow prompt the first time; after that it just succeeds or fails.
+const askFiles = async (): Promise<PermissionStatus> => {
+  const results = await Promise.all(
+    PROTECTED_FOLDERS.map((dir) =>
+      fs.promises.readdir(dir).then(
+        () => true,
+        (error: NodeJS.ErrnoException) => error.code === 'ENOENT',
+      ),
+    ),
+  )
+  return results.every(Boolean) ? 'granted' : 'missing'
+}
 
 // Automation can't be checked without asking, so remember each answer once macOS has given it.
 const file = () => path.join(app.getPath('userData'), 'permissions.json')
@@ -72,6 +95,8 @@ const installed = (t: Target) => !t.appPath || fs.existsSync(t.appPath)
 const statusOf = async (t: Target): Promise<PermissionStatus> => {
   if (t.id === 'accessibility') return systemPreferences.isTrustedAccessibilityClient(false) ? 'granted' : 'missing'
   const answer = readAnswers()[t.id]
+  // Once macOS has been asked, reading the folders again won't prompt, so recheck live.
+  if (answer && t.id === 'files') return askFiles()
   // System Events runs in the background, so once macOS has an answer it can be rechecked without a prompt.
   if (answer && t.id === 'system-events' && t.bundleId) return askAutomation(t.bundleId)
   return answer ?? 'unknown'
@@ -88,6 +113,12 @@ export const requestPermission = async (id: PermissionId) => {
   if (id === 'accessibility') {
     // Adds Laser Beam to the list (and prompts once); the switch itself has to be flipped in System Settings.
     if (!systemPreferences.isTrustedAccessibilityClient(true)) await shell.openExternal(ACCESSIBILITY_PANE)
+  } else if (id === 'files') {
+    const status = await askFiles()
+    saveAnswer(id, status)
+    if (status === 'granted') buildFolderIndex()
+    // Once denied, macOS won't prompt again; it has to be switched on in System Settings.
+    else await shell.openExternal(FILES_PANE)
   } else if (target.bundleId) {
     const status = await askAutomation(target.bundleId)
     if (status !== 'unknown') saveAnswer(id, status)

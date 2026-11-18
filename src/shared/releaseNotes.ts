@@ -1,6 +1,10 @@
 // Newest first. Add an entry with every version bump; the app shows the current version's notes once after updating.
 export const RELEASE_NOTES: { version: string; notes: string[] }[] = [
   {
+    version: '0.3.0',
+    notes: ['Folder search can now find Desktop, Documents and Downloads. Grant access in Settings → Permissions.'],
+  },
+  {
     version: '0.2.0',
     notes: [
       'Script params: add them in the editor, use {{name}} in the command, and fill them in right in the search bar.',
