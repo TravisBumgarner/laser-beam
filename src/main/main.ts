@@ -139,6 +139,8 @@ const toggle = () => {
       y: Math.round(workArea.y + workArea.height * 0.3),
     }
     win.setBounds({ ...anchor, width: WIDTH, height: 60 })
+    // The panel sometimes loses "all Spaces" and gets pinned to one desktop, so re-apply it on every open.
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
     win.show()
     win.setBounds({ ...anchor, width: WIDTH, height: 60 })
     win.focus()
