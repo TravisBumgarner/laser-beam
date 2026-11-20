@@ -10,7 +10,7 @@ const api: Api = {
   },
   resize: (height) => ipcRenderer.send('window:resize', height),
   searchApps: (query) => ipcRenderer.invoke('apps:search', query),
-  openApp: (path, query) => ipcRenderer.invoke('apps:open', path, query),
+  openApp: (path, query, newWindow) => ipcRenderer.invoke('apps:open', path, query, newWindow),
   clearPick: (query, path) => ipcRenderer.invoke('history:clear', query, path),
   searchWeb: (query) => ipcRenderer.invoke('web:search', query),
   getSettings: () => ipcRenderer.invoke('settings:get'),

@@ -13,7 +13,16 @@ import Tips from './Tips'
 
 type View = 'search' | 'ai' | 'params'
 
-type Row = { key: string; label: string; detail?: string; icon?: string; run: () => void; remove?: () => void }
+type Row = {
+  key: string
+  label: string
+  detail?: string
+  icon?: string
+  running?: boolean
+  newWindow?: boolean
+  run: (newWindow?: boolean) => void
+  remove?: () => void
+}
 
 const COMMANDS = [
   { label: 'Todo Today', prefix: 'td_' },
@@ -58,6 +67,7 @@ const App = () => {
   const [showModes, setShowModes] = useState(false)
   const [scriptResult, setScriptResult] = useState<ScriptResult | null>(null)
   const [indexing, setIndexing] = useState(false)
+  const [isDev, setIsDev] = useState(false)
   // The script waiting on param values, and what's been typed for each.
   const [pending, setPending] = useState<{ script: SavedScript; values: string[] } | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -84,6 +94,7 @@ const App = () => {
   }, [])
 
   useEffect(() => {
+    window.api.getAppInfo().then((info) => setIsDev(info.isDev))
     window.api.isIndexing().then(setIndexing)
     return window.api.onIndexing(setIndexing)
   }, [])
@@ -260,13 +271,15 @@ const App = () => {
                             key: a.path,
                             label: a.name,
                             icon: a.icon,
+                            running: a.running,
+                            newWindow: a.kind !== 'setting',
                             detail:
                               a.kind === 'setting'
                                 ? 'System Settings'
                                 : a.kind === 'folder'
                                   ? a.path.replace(/\/[^/]+$/, '') || '/'
                                   : undefined,
-                            run: () => window.api.openApp(a.path, rest),
+                            run: (newWindow?: boolean) => window.api.openApp(a.path, rest, newWindow),
                             remove: a.boosted
                               ? () =>
                                   window.api
@@ -298,7 +311,7 @@ const App = () => {
       setSelected((s) => Math.max(0, Math.min(s, rows.length - 2)))
     } else if (e.key === 'Enter' && rows[selected]) {
       e.preventDefault()
-      rows[selected].run()
+      rows[selected].run(e.metaKey)
     }
   }
 
@@ -321,7 +334,10 @@ const App = () => {
               onKeyDown={onSearchKeyDown}
             />
             {query === '' && !showModes && <span className="down-hint">↓</span>}
-            {indexing && <span className="indexing-badge">Indexing…</span>}
+            <div className="badges">
+              {indexing && <span className="badge">Indexing…</span>}
+              {isDev && <span className="badge dev-badge">DEV</span>}
+            </div>
           </div>
           {rows.length > 0 && (
             <>
@@ -337,12 +353,13 @@ const App = () => {
                     }}
                     onMouseDown={(e) => {
                       e.preventDefault()
-                      r.run()
+                      r.run(e.metaKey)
                     }}
                   >
                     <span className="app-row">
                       {r.icon && <img className="app-icon" src={r.icon} alt="" />}
                       {r.label}
+                      {r.running && <span className="badge">Open</span>}
                     </span>
                     {mode === 'sc' ? (
                       <pre className="script-preview">{scripts.find((s) => s.id === r.key)?.command}</pre>
@@ -370,6 +387,7 @@ const App = () => {
                 tips={[
                   '↑↓ select',
                   '↵ open',
+                  ...(rows[selected]?.newWindow ? ['⌘↵ new window'] : []),
                   ...(rows[selected]?.remove ? [mode === 'apps' ? '⌘⌫ forget' : '⌘⌫ delete'] : []),
                   'esc close',
                 ]}

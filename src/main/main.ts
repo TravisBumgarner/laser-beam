@@ -25,7 +25,7 @@ import {
   validFolders,
 } from './folders'
 import { clearPick, recordPick } from './history'
-import { currentHotkey, HOTKEYS, type Hotkey, registerHotkey } from './hotkey'
+import { currentHotkey, HOTKEYS, type Hotkey, registerDevHotkey, registerHotkey } from './hotkey'
 import { initLaunchAtLogin, setLaunchAtLogin } from './loginItem'
 import { completeSetup, listPermissions, markSetupPending, requestPermission, setupNeeded } from './permissions'
 import { deletePreset, listPresets, runPreset, savePreset } from './presets'
@@ -195,11 +195,11 @@ const registerIpc = () => {
     if (typeof query !== 'string' || typeof target !== 'string') throw new Error('Invalid entry')
     clearPick(query, target)
   })
-  ipcMain.handle('apps:open', async (_e, appPath: unknown, query: unknown) => {
+  ipcMain.handle('apps:open', async (_e, appPath: unknown, query: unknown, newWindow: unknown) => {
     if (typeof appPath !== 'string') throw new Error('Invalid path')
     // Open first, then hide: hiding first hands focus back to the previous app, which can
     // immediately steal it from apps that close on blur (like todo-today's menu bar popover).
-    await openApp(appPath)
+    await openApp(appPath, newWindow === true)
     if (typeof query === 'string') recordPick(query, appPath)
     win?.hide()
   })
@@ -277,6 +277,7 @@ const registerIpc = () => {
   ipcMain.on('todo:get', () => shell.openExternal(TODO_TODAY_URL))
   ipcMain.handle('app:info', () => ({
     version: app.getVersion(),
+    isDev: !app.isPackaged,
     notesUnseen: notesUnseen(),
     setupNeeded: setupNeeded(),
   }))
@@ -377,7 +378,8 @@ app.whenReady().then(() => {
   watchClipboard()
   createWindow()
   if (updated || setupNeeded()) openSettings()
-  const hotkeyError = registerHotkey(toggle)
+  // Dev builds use ⌃Space so they can run next to the installed app without fighting over its shortcut.
+  const hotkeyError = app.isPackaged ? registerHotkey(toggle) : registerDevHotkey(toggle)
   if (hotkeyError) console.error(hotkeyError)
 })
 

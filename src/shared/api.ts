@@ -100,6 +100,7 @@ export type AppResult = {
   icon: string
   kind: 'app' | 'setting' | 'folder'
   boosted: boolean
+  running: boolean
 }
 
 export type SavedChat = { id: string; title: string; messages: ChatMessage[] }
@@ -129,7 +130,7 @@ export type Api = {
   onReset: (cb: () => void) => () => void
   resize: (height: number) => void
   searchApps: (query: string) => Promise<AppResult[]>
-  openApp: (path: string, query?: string) => Promise<void>
+  openApp: (path: string, query?: string, newWindow?: boolean) => Promise<void>
   clearPick: (query: string, path: string) => Promise<void>
   searchWeb: (query: string) => Promise<void>
   getSettings: () => Promise<Settings>
@@ -141,7 +142,7 @@ export type Api = {
   getTodoToday: () => void
   setHotkey: (key: string) => Promise<string | null>
   openKeyboardShortcuts: () => void
-  getAppInfo: () => Promise<{ version: string; notesUnseen: boolean; setupNeeded: boolean }>
+  getAppInfo: () => Promise<{ version: string; isDev: boolean; notesUnseen: boolean; setupNeeded: boolean }>
   markNotesSeen: () => Promise<void>
   listPermissions: () => Promise<Permission[]>
   requestPermission: (id: PermissionId) => Promise<Permission[]>

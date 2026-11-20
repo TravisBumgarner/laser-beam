@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -85,6 +86,12 @@ const iconFor = async (appPath: string) => {
   }
 }
 
+// Executable paths of every running process, e.g. /Applications/Safari.app/Contents/MacOS/Safari.
+const runningExecutables = () =>
+  new Promise<string[]>((resolve) =>
+    execFile('ps', ['-axo', 'comm='], { timeout: 1000 }, (_error, stdout) => resolve(stdout ? stdout.split('\n') : [])),
+  )
+
 export const searchApps = async (query: string, limit = 8): Promise<AppResult[]> => {
   const q = query.trim().toLowerCase()
   if (!q) return []
@@ -125,20 +132,92 @@ export const searchApps = async (query: string, limit = 8): Promise<AppResult[]>
     )
     .slice(0, limit)
   folderResults = new Set(ranked.filter((a) => a.kind === 'folder').map((a) => a.path))
+  const running = ranked.some((a) => a.kind === 'app') ? await runningExecutables() : []
   return Promise.all(
     ranked.map(async (a) => ({
       name: a.name,
       path: a.path,
       kind: a.kind,
       boosted: a.boost > 0,
+      running: a.kind === 'app' && running.some((exe) => exe.startsWith(`${a.path}/Contents/MacOS/`)),
       icon: a.kind === 'folder' ? await folderIconUrl() : await iconFor(a.kind === 'setting' ? SETTINGS_APP : a.path),
     })),
   )
 }
 
-export const openApp = async (target: string) => {
+const run = (file: string, args: string[]) =>
+  new Promise<string>((resolve, reject) =>
+    execFile(file, args, { timeout: 5000 }, (error, stdout) => (error ? reject(error) : resolve(stdout.trim()))),
+  )
+
+// Clicks the app's own ⌘N menu item through Accessibility without bringing the app forward first. Activating
+// first would make macOS jump to whichever desktop already holds its windows, so the new one would land there.
+const CLICK_NEW_WINDOW = `on run argv
+  set bid to item 1 of argv
+  tell application "System Events"
+    set procs to (every process whose bundle identifier is bid)
+    if procs is {} then return "not-running"
+    set p to item 1 of procs
+    set appMenus to (menu 1 of menu bar items 3 thru -1 of menu bar 1 of p)
+    -- An item named "New Window" wins: in some apps (Notion) plain ⌘N makes a page, not a window.
+    repeat with m in appMenus
+      repeat with mi in (menu items of m)
+        try
+          if name of mi is "New Window" then
+            click mi
+            return "clicked"
+          end if
+        end try
+      end repeat
+    end repeat
+    repeat with m in appMenus
+      repeat with mi in (menu items of m)
+        try
+          if value of attribute "AXMenuItemCmdChar" of mi is "N" and value of attribute "AXMenuItemCmdModifiers" of mi is 0 then
+            click mi
+            return "clicked"
+          end if
+        end try
+      end repeat
+    end repeat
+  end tell
+  return "no-item"
+end run`
+
+// Finder reuses a window that already shows the folder, so ask it for a fresh one instead.
+const NEW_FINDER_WINDOW = `on run argv
+  tell application "Finder"
+    make new Finder window to (POSIX file (item 1 of argv) as alias)
+    activate
+  end tell
+end run`
+
+const newWindow = async (target: string) => {
+  if (folderResults.has(target)) return void (await run('osascript', ['-e', NEW_FINDER_WINDOW, target]))
+  const bundleId = await run('plutil', [
+    '-extract',
+    'CFBundleIdentifier',
+    'raw',
+    '-o',
+    '-',
+    `${target}/Contents/Info.plist`,
+  ])
+  const result = await run('osascript', ['-e', CLICK_NEW_WINDOW, bundleId])
+  // Not running: a plain open already starts it with a window on this desktop. Either way, bring it forward now.
+  if (result === 'clicked') await new Promise((r) => setTimeout(r, 150))
+  await shell.openPath(target)
+}
+
+export const openApp = async (target: string, inNewWindow = false) => {
   if (SETTINGS_PANES.some((p) => p.path === target)) return shell.openExternal(target)
   if (!apps.some((a) => a.path === target) && !folderResults.has(target)) throw new Error('Unknown app')
+  if (inNewWindow) {
+    try {
+      return await newWindow(target)
+    } catch (error) {
+      console.error('New window failed, opening normally:', error)
+    }
+  }
   await shell.openPath(target)
 }
 
