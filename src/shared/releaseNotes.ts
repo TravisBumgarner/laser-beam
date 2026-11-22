@@ -1,6 +1,10 @@
 // Newest first. Add an entry with every version bump; the app shows the current version's notes once after updating.
 export const RELEASE_NOTES: { version: string; notes: string[] }[] = [
   {
+    version: '0.4.1',
+    notes: ['Added diagnostic logging to help track down Laser Beam opening on the wrong desktop.'],
+  },
+  {
     version: '0.4.0',
     notes: [
       '⌘↵ (or ⌘-click) opens an app or folder in a new window on the desktop you are on.',
