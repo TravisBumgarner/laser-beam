@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import tty from 'node:tty'
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, screen, shell } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, powerMonitor, screen, shell } from 'electron'
 import { UpdateSourceType, updateElectronApp } from 'update-electron-app'
 import {
   LAYOUT_POSITIONS,
@@ -26,6 +26,7 @@ import {
 } from './folders'
 import { clearPick, recordPick } from './history'
 import { currentHotkey, HOTKEYS, type Hotkey, registerDevHotkey, registerHotkey } from './hotkey'
+import { log } from './log'
 import { initLaunchAtLogin, setLaunchAtLogin } from './loginItem'
 import { completeSetup, listPermissions, markSetupPending, requestPermission, setupNeeded } from './permissions'
 import { deletePreset, listPresets, runPreset, savePreset } from './presets'
@@ -47,6 +48,39 @@ const MAX_HEIGHT = 520
 let win: BrowserWindow | null = null
 let anchor = { x: 0, y: 0 }
 let dialogOpen = false
+
+// Snapshot of everything that might explain the panel showing on the wrong Space/display or not at all.
+const winState = () => {
+  const cursor = screen.getCursorScreenPoint()
+  const display = screen.getDisplayNearestPoint(cursor)
+  return {
+    cursor,
+    cursorDisplay: { id: display.id, bounds: display.bounds, workArea: display.workArea },
+    win: win
+      ? {
+          destroyed: win.isDestroyed(),
+          visible: win.isVisible(),
+          focused: win.isFocused(),
+          minimized: win.isMinimized(),
+          allWorkspaces: win.isVisibleOnAllWorkspaces(),
+          alwaysOnTop: win.isAlwaysOnTop(),
+          bounds: win.getBounds(),
+          display: screen.getDisplayMatching(win.getBounds()).id,
+          crashed: win.webContents.isCrashed(),
+        }
+      : null,
+    focusedWindow: BrowserWindow.getFocusedWindow()?.getTitle() ?? null,
+    settingsOpen: !!settingsWin,
+    dialogOpen,
+    hotkey: currentHotkey(),
+    hotkeyRegistered: globalShortcut.isRegistered(currentHotkey()),
+  }
+}
+
+const hideWin = (reason: string) => {
+  log('hide', { reason, visible: win?.isVisible() })
+  win?.hide()
+}
 
 const createWindow = () => {
   win = new BrowserWindow({
@@ -74,16 +108,24 @@ const createWindow = () => {
   win.setAlwaysOnTop(true, 'pop-up-menu')
 
   win.on('blur', () => {
-    if (!win || dialogOpen) return
+    if (!win || dialogOpen) {
+      log('blur:ignored', { dialogOpen })
+      return
+    }
     // Clicking inside the panel can briefly blur it on macOS; only hide when the click was elsewhere.
     const { x, y } = screen.getCursorScreenPoint()
     const b = win.getBounds()
     if (x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height) {
+      log('blur:refocus', { cursor: { x, y }, bounds: b })
       win.focus()
       return
     }
-    win.hide()
+    hideWin('blur')
   })
+  for (const event of ['show', 'hide', 'focus', 'move', 'closed', 'unresponsive', 'responsive'] as const) {
+    win.on(event as 'show', () => log(`win:${event}`, win && !win.isDestroyed() ? { bounds: win.getBounds() } : {}))
+  }
+  win.webContents.on('render-process-gone', (_e, details) => log('win:render-process-gone', { ...details }))
 
   loadRenderer(win)
 }
@@ -99,7 +141,7 @@ const loadRenderer = (w: BrowserWindow, hash = '') => {
 let settingsWin: BrowserWindow | null = null
 
 const openSettings = () => {
-  win?.hide()
+  hideWin('openSettings')
   if (settingsWin) {
     settingsWin.show()
     settingsWin.focus()
@@ -128,9 +170,10 @@ const openSettings = () => {
 }
 
 const toggle = () => {
+  log('hotkey:pressed', winState())
   if (!win) return
   if (win.isVisible()) {
-    win.hide()
+    hideWin('toggle')
   } else {
     const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
     win.webContents.send('window:reset')
@@ -144,6 +187,9 @@ const toggle = () => {
     win.show()
     win.setBounds({ ...anchor, width: WIDTH, height: 60 })
     win.focus()
+    log('toggle:shown', { anchor, ...winState() })
+    // macOS may still be moving Spaces; see where the panel actually ended up a moment later.
+    setTimeout(() => log('toggle:shown+250ms', winState()), 250)
   }
 }
 
@@ -164,7 +210,7 @@ const settings = async (): Promise<Settings> => ({
 })
 
 const registerIpc = () => {
-  ipcMain.on('window:hide', () => win?.hide())
+  ipcMain.on('window:hide', () => hideWin('renderer'))
   ipcMain.on('window:resize', (_e, height: unknown) => {
     if (!win?.isVisible() || typeof height !== 'number' || !Number.isFinite(height)) return
     win?.setBounds({ ...anchor, width: WIDTH, height: Math.min(MAX_HEIGHT, Math.max(60, Math.ceil(height))) })
@@ -201,13 +247,13 @@ const registerIpc = () => {
     // immediately steal it from apps that close on blur (like todo-today's menu bar popover).
     await openApp(appPath, newWindow === true)
     if (typeof query === 'string') recordPick(query, appPath)
-    win?.hide()
+    hideWin('ipc')
   })
   ipcMain.handle('web:search', async (_e, query: unknown) => {
     if (typeof query !== 'string' || !query.trim()) return
     const url = `https://www.google.com/search?q=${encodeURIComponent(query.trim())}`
     await new Promise((resolve) => execFile('open', ['-a', 'Firefox', url], resolve))
-    win?.hide()
+    hideWin('ipc')
   })
   ipcMain.handle('script:run', (_e, command: unknown) => {
     if (typeof command !== 'string' || !command.trim()) throw new Error('Invalid command')
@@ -217,7 +263,7 @@ const registerIpc = () => {
     if (typeof command !== 'string' || !command.trim()) throw new Error('Invalid command')
     if (!TERMINALS.includes(terminal as TerminalApp)) throw new Error('Invalid terminal')
     const error = await runInTerminal(command, terminal as TerminalApp)
-    if (!error) win?.hide()
+    if (!error) hideWin('terminal')
     return error
   })
   ipcMain.handle('scripts:list', () => listScripts())
@@ -261,9 +307,12 @@ const registerIpc = () => {
   ipcMain.handle('presets:run', async (_e, id: unknown) => {
     const preset = listPresets().find((p) => p.id === id)
     if (!preset) return 'Preset not found'
-    win?.hide()
+    hideWin('ipc')
     const error = await runPreset(preset)
-    if (error) win?.show()
+    if (error) {
+      log('show', { reason: 'presetError', error })
+      win?.show()
+    }
     return error
   })
   ipcMain.on('settings:open', () => openSettings())
@@ -300,7 +349,7 @@ const registerIpc = () => {
     } catch {
       return 'Todo Today 4.5.0 or newer is needed for td_. Update it, or run it once so macOS registers it.'
     }
-    win?.hide()
+    hideWin('ipc')
     return null
   })
   ipcMain.handle('scripts:delete', (_e, id: unknown) => {
@@ -352,7 +401,7 @@ const registerIpc = () => {
   ipcMain.handle('clipboard:paste', async (_e, text: unknown) => {
     if (typeof text !== 'string') throw new Error('Invalid text')
     // Hide first so the previous app is frontmost when the paste keystroke lands.
-    win?.hide()
+    hideWin('ipc')
     await pasteClip(text)
   })
 }
@@ -380,7 +429,16 @@ app.whenReady().then(() => {
   if (updated || setupNeeded()) openSettings()
   // Dev builds use ⌃Space so they can run next to the installed app without fighting over its shortcut.
   const hotkeyError = app.isPackaged ? registerHotkey(toggle) : registerDevHotkey(toggle)
+  log('startup', { version: app.getVersion(), hotkeyError, displays: screen.getAllDisplays().map((d) => d.id) })
   if (hotkeyError) console.error(hotkeyError)
+  for (const event of ['suspend', 'resume', 'lock-screen', 'unlock-screen'] as const) {
+    powerMonitor.on(event as 'suspend', () => log(`power:${event}`, winState()))
+  }
+  screen.on('display-added', (_e, d) => log('display:added', { id: d.id, bounds: d.bounds }))
+  screen.on('display-removed', (_e, d) => log('display:removed', { id: d.id }))
+  screen.on('display-metrics-changed', (_e, d, changed) => log('display:changed', { id: d.id, changed }))
+  app.on('did-become-active', () => log('app:active'))
+  app.on('did-resign-active', () => log('app:inactive'))
 })
 
 // Windows only ever show the bundled renderer: block navigation and new windows.

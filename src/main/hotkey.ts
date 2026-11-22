@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { app, globalShortcut } from 'electron'
+import { log } from './log'
 
 export const HOTKEYS = ['Alt+Space', 'Command+Space'] as const
 export type Hotkey = (typeof HOTKEYS)[number]
@@ -44,6 +45,7 @@ export const currentHotkey = () => active
 export const registerHotkey = (onPress: () => void, key: Hotkey = saved()): string | null => {
   globalShortcut.unregisterAll()
   const blocked = key === 'Command+Space' && spotlightOwnsCmdSpace()
+  log('hotkey:register', { key, blocked })
   if (!blocked && globalShortcut.register(key, onPress)) {
     active = key
     fs.mkdirSync(path.dirname(file()), { recursive: true })
