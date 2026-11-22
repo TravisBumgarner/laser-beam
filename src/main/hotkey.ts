@@ -58,3 +58,11 @@ export const registerHotkey = (onPress: () => void, key: Hotkey = saved()): stri
     ? '⌘Space is still taken by Spotlight. Turn off "Show Spotlight search" in Keyboard Shortcuts, then try again.'
     : `Couldn't register ${key}.`
 }
+
+// Not saved, so it never changes the installed app's choice.
+export const registerDevHotkey = (onPress: () => void): string | null => {
+  globalShortcut.unregisterAll()
+  return globalShortcut.register('Control+Space', onPress)
+    ? null
+    : "Couldn't register ⌃Space. macOS uses it to switch input sources; turn that off in Keyboard Shortcuts."
+}
