@@ -12,13 +12,13 @@ Press <kbd>↓</kbd> on an empty bar to see every mode, or type its prefix.
 
 | Prefix | Mode                                                                      |
 | ------ | ------------------------------------------------------------------------- |
-| `ai_`  | Ask Claude (uses your logged-in Claude Code CLI)                          |
-| `td_`  | Add a task to [Todo Today](https://github.com/TravisBumgarner/Todo-Today) |
-| `sc_`  | Run saved shell scripts                                                   |
-| `pr_`  | Window layout presets                                                     |
-| `cb_`  | Clipboard history                                                         |
-| `se_`  | Search Google                                                             |
-| `co_`  | Settings                                                                  |
+| `> ai` | Ask Claude (uses your logged-in Claude Code CLI)                          |
+| `> td` | Add a task to [Todo Today](https://github.com/TravisBumgarner/Todo-Today) |
+| `> sc` | Run saved shell scripts                                                   |
+| `> pr` | Window layout presets                                                     |
+| `> cb` | Clipboard history                                                         |
+| `> se` | Search Google                                                             |
+| `> co` | Settings                                                                  |
 
 ### Ask Claude
 

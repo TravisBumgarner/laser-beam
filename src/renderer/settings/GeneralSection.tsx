@@ -63,7 +63,7 @@ const GeneralSection = () => {
         <span>
           Todo Today{' '}
           <span className="muted">
-            {todoInstalled === false ? "isn't installed, so td_ is hidden" : todoInstalled ? 'installed' : ''}
+            {todoInstalled === false ? "isn't installed, so > td is hidden" : todoInstalled ? 'installed' : ''}
           </span>
         </span>
         <button type="button" className="btn small" onClick={() => window.api.getTodoToday()}>

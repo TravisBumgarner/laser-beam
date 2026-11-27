@@ -25,29 +25,29 @@ type Row = {
 }
 
 const COMMANDS = [
-  { label: 'Todo Today', prefix: 'td_' },
-  { label: 'Ask Claude', prefix: 'ai_' },
-  { label: 'Scripts', prefix: 'sc_' },
-  { label: 'Clipboard History', prefix: 'cb_' },
-  { label: 'Search Google', prefix: 'se_' },
-  { label: 'Laser Beam Config', prefix: 'co_' },
+  { label: 'Todo Today', prefix: '> td' },
+  { label: 'Ask Claude', prefix: '> ai' },
+  { label: 'Scripts', prefix: '> sc' },
+  { label: 'Clipboard History', prefix: '> cb' },
+  { label: 'Search Google', prefix: '> se' },
+  { label: 'Laser Beam Config', prefix: '> co' },
 ]
 
 const parse = (query: string) => {
-  const match = query.match(/^(ai|cb|co|pr|sc|se|td)_(.*)$/s)
+  const match = query.match(/^>\s*(ai|cb|co|pr|sc|se|td)(?:\s+(.*)|$)/s)
   return match
-    ? { mode: match[1] as 'ai' | 'cb' | 'co' | 'pr' | 'sc' | 'se' | 'td', rest: match[2] }
+    ? { mode: match[1] as 'ai' | 'cb' | 'co' | 'pr' | 'sc' | 'se' | 'td', rest: match[2] ?? '' }
     : { mode: 'apps' as const, rest: query }
 }
 
 const MODES = [
-  { prefix: 'ai_', label: 'Ask Claude' },
-  { prefix: 'td_', label: 'Todo Today' },
-  { prefix: 'sc_', label: 'Scripts' },
-  { prefix: 'pr_', label: 'Presets' },
-  { prefix: 'cb_', label: 'Clipboard History' },
-  { prefix: 'se_', label: 'Search Google' },
-  { prefix: 'co_', label: 'Config' },
+  { prefix: '> ai', label: 'Ask Claude' },
+  { prefix: '> td', label: 'Todo Today' },
+  { prefix: '> sc', label: 'Scripts' },
+  { prefix: '> pr', label: 'Presets' },
+  { prefix: '> cb', label: 'Clipboard History' },
+  { prefix: '> se', label: 'Search Google' },
+  { prefix: '> co', label: 'Config' },
 ]
 
 const App = () => {
@@ -169,15 +169,15 @@ const App = () => {
   const q = rest.trim().toLowerCase()
   const rows: Row[] =
     query === '' && showModes
-      ? MODES.filter((m) => todoInstalled || m.prefix !== 'td_').map((m) => ({
+      ? MODES.filter((m) => todoInstalled || m.prefix !== '> td').map((m) => ({
           key: m.prefix,
           label: m.label,
           detail: m.prefix,
           run: () => {
             setShowModes(false)
-            if (m.prefix === 'co_') window.api.openSettings()
+            if (m.prefix === '> co') window.api.openSettings()
             else {
-              setQuery(['td_', 'ai_', 'se_'].includes(m.prefix) ? `${m.prefix} ` : m.prefix)
+              setQuery(`${m.prefix} `)
               inputRef.current?.focus()
             }
           },
@@ -253,16 +253,16 @@ const App = () => {
                           run: () => runScript(s),
                         }))
                     : [
-                        // Commands that switch the bar into a prefix mode, e.g. picking "Todo Today" starts td_.
+                        // Commands that switch the bar into a prefix mode, e.g. picking "Todo Today" starts > td.
                         ...(q
                           ? COMMANDS.filter(
-                              (c) => (todoInstalled || c.prefix !== 'td_') && c.label.toLowerCase().includes(q),
+                              (c) => (todoInstalled || c.prefix !== '> td') && c.label.toLowerCase().includes(q),
                             ).map((c) => ({
                               key: c.prefix,
                               label: c.label,
                               icon: apps.find((a) => a.name === c.label)?.icon,
                               detail: c.prefix,
-                              run: () => setQuery(['td_', 'ai_', 'se_'].includes(c.prefix) ? `${c.prefix} ` : c.prefix),
+                              run: () => setQuery(`${c.prefix} `),
                             }))
                           : []),
                         ...apps
@@ -397,14 +397,14 @@ const App = () => {
             </>
           )}
           {mode === 'pr' && presets.length === 0 && (
-            <div className="panel-body muted">No saved presets. Add some in co_ → Presets.</div>
+            <div className="panel-body muted">No saved presets. Add some in {'> co'} → Presets.</div>
           )}
           {mode === 'cb' && clips.length === 0 && (
             <div className="panel-body muted">Nothing copied yet. Copy some text and it will show up here.</div>
           )}
           {mode === 'td' && !q && <div className="panel-body muted">Type a task, then ↵ to add it to today.</div>}
           {mode === 'sc' && scripts.length === 0 && (
-            <div className="panel-body muted">No saved scripts. Add some in co_ → Scripts.</div>
+            <div className="panel-body muted">No saved scripts. Add some in {'> co'} → Scripts.</div>
           )}
         </>
       )}
@@ -424,7 +424,9 @@ const App = () => {
               requestAnimationFrame(() => inputRef.current?.focus())
             }}
           >
-            <span className="param-script">sc_ {pending.script.name}</span>
+            <span className="param-script">
+              {'> sc'} {pending.script.name}
+            </span>
             {pending.script.params.map((p, i) => (
               <input
                 key={p.name}

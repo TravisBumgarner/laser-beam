@@ -374,7 +374,7 @@ const registerIpc = () => {
         if (error) throw new Error(error)
       }
     } catch {
-      return 'Todo Today 4.5.0 or newer is needed for td_. Update it, or run it once so macOS registers it.'
+      return 'Todo Today 4.5.0 or newer is needed for > td. Update it, or run it once so macOS registers it.'
     }
     hideWin('ipc')
     return null

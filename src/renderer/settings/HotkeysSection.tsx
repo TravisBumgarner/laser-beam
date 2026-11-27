@@ -8,10 +8,10 @@ const GROUPS = (hotkey: string) => [
   {
     title: 'Search bar',
     keys: [
-      ['Chat with Claude', 'ai_'],
-      ['Add a Todo Today task', 'td_'],
-      ['Run a saved script', 'sc_'],
-      ['Open config', 'co_'],
+      ['Chat with Claude', '> ai'],
+      ['Add a Todo Today task', '> td'],
+      ['Run a saved script', '> sc'],
+      ['Open config', '> co'],
       ['Move selection', '↑ ↓'],
       ['Open selection', '↵'],
       ['Forget a remembered result', '⌘⌫'],
