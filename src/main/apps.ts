@@ -18,6 +18,9 @@ const ROOTS = [
   path.join(os.homedir(), 'Applications'),
 ]
 
+// Apps that live outside ROOTS, in folders otherwise full of system internals.
+const EXTRA_APPS = ['/System/Library/CoreServices/Finder.app']
+
 let apps: { name: string; path: string }[] = []
 const icons = new Map<string, string>()
 let folderResults = new Set<string>()
@@ -42,6 +45,9 @@ const scan = () => {
       const full = path.join(root, entry.name)
       found.set(full, { name: entry.name.slice(0, -4), path: full })
     }
+  }
+  for (const full of EXTRA_APPS) {
+    if (fs.existsSync(full)) found.set(full, { name: path.basename(full, '.app'), path: full })
   }
   apps = [...found.values()].sort((a, b) => a.name.localeCompare(b.name))
 }

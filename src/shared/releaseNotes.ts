@@ -2,7 +2,7 @@
 export const RELEASE_NOTES: { version: string; notes: string[] }[] = [
   {
     version: '0.4.2',
-    notes: ['Fixed Laser Beam sometimes not appearing after waking from sleep.'],
+    notes: ['Fixed Laser Beam sometimes not appearing after waking from sleep.', 'Finder now shows up in search.'],
   },
   {
     version: '0.4.1',
