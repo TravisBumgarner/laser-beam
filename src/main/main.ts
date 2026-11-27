@@ -77,6 +77,27 @@ const winState = () => {
   }
 }
 
+// Electron's isVisible() can say true while macOS shows nothing, so ask the window server directly.
+const ON_SCREEN_JXA = `ObjC.import("CoreGraphics")
+function run([id]) {
+  const all = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionAll, 0)))
+  const w = all.find((w) => w.kCGWindowNumber === Number(id))
+  return JSON.stringify(w ? { onscreen: !!w.kCGWindowIsOnscreen, layer: w.kCGWindowLayer, alpha: w.kCGWindowAlpha, bounds: w.kCGWindowBounds } : null)
+}`
+
+const onScreen = (done: (result: unknown) => void) => {
+  const id = win?.getMediaSourceId().split(':')[1]
+  if (!id) return done(null)
+  execFile('osascript', ['-l', 'JavaScript', '-e', ON_SCREEN_JXA, id], (err, stdout) => {
+    if (err) return done({ error: err.message })
+    try {
+      done({ windowId: Number(id), ...JSON.parse(stdout) })
+    } catch {
+      done({ windowId: Number(id), raw: stdout.trim() })
+    }
+  })
+}
+
 const hideWin = (reason: string) => {
   log('hide', { reason, visible: win?.isVisible() })
   win?.hide()
@@ -182,14 +203,20 @@ const toggle = () => {
       y: Math.round(workArea.y + workArea.height * 0.3),
     }
     win.setBounds({ ...anchor, width: WIDTH, height: 60 })
-    // The panel sometimes loses "all Spaces" and gets pinned to one desktop, so re-apply it on every open.
+    // After sleep the panel can get pinned to one desktop while still reporting "all Spaces"; re-setting
+    // it to the same value is a no-op, so turn it off and back on before every open.
+    win.setVisibleOnAllWorkspaces(false)
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    win.setAlwaysOnTop(true, 'pop-up-menu')
     win.show()
     win.setBounds({ ...anchor, width: WIDTH, height: 60 })
     win.focus()
     log('toggle:shown', { anchor, ...winState() })
     // macOS may still be moving Spaces; see where the panel actually ended up a moment later.
-    setTimeout(() => log('toggle:shown+250ms', winState()), 250)
+    setTimeout(() => {
+      const state = winState()
+      onScreen((actual) => log('toggle:shown+250ms', { ...state, windowServer: actual }))
+    }, 250)
   }
 }
 
