@@ -10,7 +10,10 @@ export const chat = (prompt: string, sessionId: string | null) =>
   new Promise<ChatResult>((resolve) => {
     const args = ['claude', '-p', '--output-format', 'json']
     if (sessionId) args.push('--resume', sessionId)
-    const child = spawn('/bin/zsh', ['-lc', args.map((a) => `'${a}'`).join(' ')], { cwd: os.homedir() })
+    // A login shell skips ~/.zshrc, where the native installer puts ~/.local/bin on PATH, so add the usual spots.
+    const extra = [path.join(os.homedir(), '.local/bin'), '/opt/homebrew/bin', '/usr/local/bin']
+    const env = { ...process.env, PATH: [...extra, process.env.PATH].filter(Boolean).join(':') }
+    const child = spawn('/bin/zsh', ['-lc', args.map((a) => `'${a}'`).join(' ')], { cwd: os.homedir(), env })
 
     let stdout = ''
     let stderr = ''
