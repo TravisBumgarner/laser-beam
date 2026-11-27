@@ -167,9 +167,15 @@ const App = () => {
   }
 
   const q = rest.trim().toLowerCase()
+  // A bare ">" (or "> c" before a full prefix) lists the modes it can reach.
+  const modeFilter = mode === 'apps' && query.startsWith('>') ? query.slice(1).trim().toLowerCase() : null
   const rows: Row[] =
-    query === '' && showModes
-      ? MODES.filter((m) => todoInstalled || m.prefix !== '> td').map((m) => ({
+    (query === '' && showModes) || modeFilter !== null
+      ? MODES.filter(
+          (m) =>
+            (todoInstalled || m.prefix !== '> td') &&
+            (!modeFilter || m.prefix.slice(2).startsWith(modeFilter) || m.label.toLowerCase().includes(modeFilter)),
+        ).map((m) => ({
           key: m.prefix,
           label: m.label,
           detail: m.prefix,
