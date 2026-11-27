@@ -7,6 +7,7 @@ export const RELEASE_NOTES: { version: string; notes: string[] }[] = [
       'New Finder and Bluetooth entries in Settings → Permissions for those commands.',
       'Modes now start with "> " instead of ending in "_" (for example "> ai" instead of "ai_"). Type ">" to see them all.',
       'Finder now shows up in search.',
+      'Fixed "> ai" failing with "command not found: claude" when Claude Code is installed in ~/.local/bin.',
       'Fixed Laser Beam sometimes not appearing after waking from sleep.',
     ],
   },
