@@ -5,6 +5,7 @@ export const RELEASE_NOTES: { version: string; notes: string[] }[] = [
     notes: [
       'System commands in search: Toggle Dark Mode, Lock Screen, Sleep, Empty Trash, Toggle Wi-Fi, Toggle Bluetooth, Show Desktop, Eject All Disks, Restart and Shut Down.',
       'New Finder and Bluetooth entries in Settings → Permissions for those commands.',
+      'Modes now start with "> " instead of ending in "_" (for example "> ai" instead of "ai_"). Type ">" to see them all.',
       'Finder now shows up in search.',
       'Fixed Laser Beam sometimes not appearing after waking from sleep.',
     ],
