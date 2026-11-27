@@ -272,13 +272,15 @@ const App = () => {
                             label: a.name,
                             icon: a.icon,
                             running: a.running,
-                            newWindow: a.kind !== 'setting',
+                            newWindow: a.kind !== 'setting' && a.kind !== 'action',
                             detail:
                               a.kind === 'setting'
                                 ? 'System Settings'
-                                : a.kind === 'folder'
-                                  ? a.path.replace(/\/[^/]+$/, '') || '/'
-                                  : undefined,
+                                : a.kind === 'action'
+                                  ? 'System'
+                                  : a.kind === 'folder'
+                                    ? a.path.replace(/\/[^/]+$/, '') || '/'
+                                    : undefined,
                             run: (newWindow?: boolean) => window.api.openApp(a.path, rest, newWindow),
                             remove: a.boosted
                               ? () =>

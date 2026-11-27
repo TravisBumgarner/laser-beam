@@ -12,7 +12,7 @@ const TARGETS: Target[] = [
   {
     id: 'accessibility',
     label: 'Accessibility',
-    why: 'Pastes clipboard history into the app you were using and moves windows for presets.',
+    why: 'Pastes clipboard history into the app you were using, moves windows for presets, and runs Lock Screen.',
   },
   {
     id: 'files',
@@ -22,8 +22,19 @@ const TARGETS: Target[] = [
   {
     id: 'system-events',
     label: 'Automation: System Events',
-    why: 'Sends the paste keystroke and arranges preset windows.',
+    why: 'Sends the paste keystroke, arranges preset windows, and runs Toggle Dark Mode and Lock Screen.',
     bundleId: 'com.apple.systemevents',
+  },
+  {
+    id: 'finder',
+    label: 'Automation: Finder',
+    why: 'Runs Empty Trash and Eject All Disks, and opens folders in a new window.',
+    bundleId: 'com.apple.finder',
+  },
+  {
+    id: 'bluetooth',
+    label: 'Bluetooth',
+    why: 'Runs Toggle Bluetooth.',
   },
   {
     id: 'terminal',
@@ -44,6 +55,7 @@ const TARGETS: Target[] = [
 const ACCESSIBILITY_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'
 const AUTOMATION_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Automation'
 const FILES_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders'
+const BLUETOOTH_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth'
 
 const PROTECTED_FOLDERS = ['Desktop', 'Documents', 'Downloads'].map((name) => path.join(os.homedir(), name))
 
@@ -59,6 +71,22 @@ const askFiles = async (): Promise<PermissionStatus> => {
   )
   return results.every(Boolean) ? 'granted' : 'missing'
 }
+
+// Reading Bluetooth's power state makes macOS show its Allow prompt the first time; after that it just succeeds or fails.
+const askBluetooth = () =>
+  new Promise<PermissionStatus>((resolve) =>
+    execFile(
+      'osascript',
+      [
+        '-l',
+        'JavaScript',
+        '-e',
+        'ObjC.import("IOBluetooth"); ObjC.bindFunction("IOBluetoothPreferenceGetControllerPowerState", ["int", []]); $.IOBluetoothPreferenceGetControllerPowerState()',
+      ],
+      { timeout: 120_000 },
+      (error) => resolve(error ? 'missing' : 'granted'),
+    ),
+  )
 
 // Automation can't be checked without asking, so remember each answer once macOS has given it.
 const file = () => path.join(app.getPath('userData'), 'permissions.json')
@@ -97,8 +125,9 @@ const statusOf = async (t: Target): Promise<PermissionStatus> => {
   const answer = readAnswers()[t.id]
   // Once macOS has been asked, reading the folders again won't prompt, so recheck live.
   if (answer && t.id === 'files') return askFiles()
-  // System Events runs in the background, so once macOS has an answer it can be rechecked without a prompt.
-  if (answer && t.id === 'system-events' && t.bundleId) return askAutomation(t.bundleId)
+  if (answer && t.id === 'bluetooth') return askBluetooth()
+  // System Events and Finder are always running, so once macOS has an answer they can be rechecked without a prompt.
+  if (answer && (t.id === 'system-events' || t.id === 'finder') && t.bundleId) return askAutomation(t.bundleId)
   return answer ?? 'unknown'
 }
 
@@ -119,6 +148,10 @@ export const requestPermission = async (id: PermissionId) => {
     if (status === 'granted') buildFolderIndex()
     // Once denied, macOS won't prompt again; it has to be switched on in System Settings.
     else await shell.openExternal(FILES_PANE)
+  } else if (id === 'bluetooth') {
+    const status = await askBluetooth()
+    saveAnswer(id, status)
+    if (status === 'missing') await shell.openExternal(BLUETOOTH_PANE)
   } else if (target.bundleId) {
     const status = await askAutomation(target.bundleId)
     if (status !== 'unknown') saveAnswer(id, status)

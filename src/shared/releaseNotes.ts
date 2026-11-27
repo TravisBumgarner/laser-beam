@@ -1,8 +1,13 @@
 // Newest first. Add an entry with every version bump; the app shows the current version's notes once after updating.
 export const RELEASE_NOTES: { version: string; notes: string[] }[] = [
   {
-    version: '0.4.2',
-    notes: ['Fixed Laser Beam sometimes not appearing after waking from sleep.', 'Finder now shows up in search.'],
+    version: '0.5.0',
+    notes: [
+      'System commands in search: Toggle Dark Mode, Lock Screen, Sleep, Empty Trash, Toggle Wi-Fi, Toggle Bluetooth, Show Desktop, Eject All Disks, Restart and Shut Down.',
+      'New Finder and Bluetooth entries in Settings → Permissions for those commands.',
+      'Finder now shows up in search.',
+      'Fixed Laser Beam sometimes not appearing after waking from sleep.',
+    ],
   },
   {
     version: '0.4.1',
