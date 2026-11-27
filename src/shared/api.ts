@@ -47,7 +47,7 @@ export const fillParams = (command: string, params: ScriptParam[], values: strin
   return out
 }
 
-export type PermissionId = 'accessibility' | 'files' | 'system-events' | 'terminal' | 'iterm'
+export type PermissionId = 'accessibility' | 'files' | 'system-events' | 'finder' | 'bluetooth' | 'terminal' | 'iterm'
 
 // 'unknown' means macOS hasn't been asked yet.
 export type PermissionStatus = 'granted' | 'missing' | 'unknown'
@@ -98,7 +98,7 @@ export type AppResult = {
   name: string
   path: string
   icon: string
-  kind: 'app' | 'setting' | 'folder'
+  kind: 'app' | 'setting' | 'folder' | 'action'
   boosted: boolean
   running: boolean
 }

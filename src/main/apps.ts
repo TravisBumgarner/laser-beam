@@ -7,8 +7,10 @@ import type { AppResult } from '../shared/api'
 import { lastUsed, searchFolders } from './folders'
 import { boosts } from './history'
 import { SETTINGS_PANES } from './settingsPanes'
+import { runSystemAction, SYSTEM_ACTIONS } from './systemActions'
 
 const SETTINGS_APP = '/System/Applications/System Settings.app'
+const ACTION_ICON_APP = '/System/Applications/Shortcuts.app'
 
 const ROOTS = [
   '/Applications',
@@ -17,6 +19,9 @@ const ROOTS = [
   '/System/Applications/Utilities',
   path.join(os.homedir(), 'Applications'),
 ]
+
+// Apps that live outside ROOTS, in folders otherwise full of system internals.
+const EXTRA_APPS = ['/System/Library/CoreServices/Finder.app']
 
 let apps: { name: string; path: string }[] = []
 const icons = new Map<string, string>()
@@ -42,6 +47,9 @@ const scan = () => {
       const full = path.join(root, entry.name)
       found.set(full, { name: entry.name.slice(0, -4), path: full })
     }
+  }
+  for (const full of EXTRA_APPS) {
+    if (fs.existsSync(full)) found.set(full, { name: path.basename(full, '.app'), path: full })
   }
   apps = [...found.values()].sort((a, b) => a.name.localeCompare(b.name))
 }
@@ -96,7 +104,7 @@ export const searchApps = async (query: string, limit = 8): Promise<AppResult[]>
   const q = query.trim().toLowerCase()
   if (!q) return []
   const folders = searchFolders(q).map((p) => ({ name: path.basename(p), path: p, kind: 'folder' as const }))
-  const kindRank = { app: 0, setting: 1, folder: 2 }
+  const kindRank = { app: 0, action: 1, setting: 2, folder: 3 }
   const boost = boosts(q)
   const levels = (p: string) => p.split('/').length
   const home = os.homedir()
@@ -104,6 +112,7 @@ export const searchApps = async (query: string, limit = 8): Promise<AppResult[]>
   const candidates = [
     ...apps.map((a) => ({ ...a, kind: 'app' as const })),
     ...SETTINGS_PANES.map((p) => ({ ...p, kind: 'setting' as const })),
+    ...SYSTEM_ACTIONS.map((a) => ({ ...a, kind: 'action' as const })),
     ...folders,
   ]
     // Nobody types a folder's full name, so an exact folder match counts the same as a prefix match.
@@ -140,7 +149,10 @@ export const searchApps = async (query: string, limit = 8): Promise<AppResult[]>
       kind: a.kind,
       boosted: a.boost > 0,
       running: a.kind === 'app' && running.some((exe) => exe.startsWith(`${a.path}/Contents/MacOS/`)),
-      icon: a.kind === 'folder' ? await folderIconUrl() : await iconFor(a.kind === 'setting' ? SETTINGS_APP : a.path),
+      icon:
+        a.kind === 'folder'
+          ? await folderIconUrl()
+          : await iconFor(a.kind === 'setting' ? SETTINGS_APP : a.kind === 'action' ? ACTION_ICON_APP : a.path),
     })),
   )
 }
@@ -210,6 +222,7 @@ const newWindow = async (target: string) => {
 
 export const openApp = async (target: string, inNewWindow = false) => {
   if (SETTINGS_PANES.some((p) => p.path === target)) return shell.openExternal(target)
+  if (await runSystemAction(target)) return
   if (!apps.some((a) => a.path === target) && !folderResults.has(target)) throw new Error('Unknown app')
   if (inNewWindow) {
     try {

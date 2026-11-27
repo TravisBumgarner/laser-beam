@@ -10,7 +10,10 @@ const config: ForgeConfig = {
     executableName: 'laser-beam',
     icon: 'assets/icon',
     // Hardened runtime needs this for the osascript/System Events calls.
-    extendInfo: { NSAppleEventsUsageDescription: 'Laser Beam pastes clips and arranges windows.' },
+    extendInfo: {
+      NSAppleEventsUsageDescription: 'Laser Beam pastes clips, arranges windows and runs system commands.',
+      NSBluetoothAlwaysUsageDescription: 'Laser Beam turns Bluetooth on and off for the Toggle Bluetooth command.',
+    },
     osxSign: shouldSign
       ? {
           identity: process.env.APPLE_IDENTITY,
