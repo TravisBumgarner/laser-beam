@@ -1,6 +1,10 @@
 // Newest first. Add an entry with every version bump; the app shows the current version's notes once after updating.
 export const RELEASE_NOTES: { version: string; notes: string[] }[] = [
   {
+    version: '0.5.1',
+    notes: ['Fixed "> ai" failing with "command not found: claude" when Claude Code is installed in ~/.local/bin.'],
+  },
+  {
     version: '0.5.0',
     notes: [
       'System commands in search: Toggle Dark Mode, Lock Screen, Sleep, Empty Trash, Toggle Wi-Fi, Toggle Bluetooth, Show Desktop, Eject All Disks, Restart and Shut Down.',
